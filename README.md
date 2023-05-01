@@ -1,5 +1,7 @@
 # BetUnfair
 
+## Authors: Ramiro Lopez Cento, Esteban Aspe Ruiz and Marco Ciccale Baztan
+
 **TODO: Add description**
 
 ## Installation
