@@ -35,7 +35,6 @@ defmodule BetUnfair do
     # Start the DB
     CubDB.start_link(data_dir: "./data/" <> name, name: String.to_atom(name))
     # Start the server
-    # State
     GenServer.start_link(BetUnfair, %{server: :bet_unfair, db: String.to_atom(name)}, name: :bet_unfair)
   end
 
@@ -208,6 +207,7 @@ defmodule BetUnfair do
       name ->
         path = "./data/" <> Atom.to_string(name)
         # Create backup
+        File.mkdir("./swap")
         CubDB.back_up(name, "./swap/" <> Atom.to_string(name))
         # Delete previous directory if exists
         File.rm_rf(path)
