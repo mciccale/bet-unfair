@@ -24,3 +24,6 @@ bet_unfair-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Data subdirectories (trash)
+/data/*

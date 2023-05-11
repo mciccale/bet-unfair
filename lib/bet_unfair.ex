@@ -27,58 +27,51 @@ defmodule BetUnfair do
                               :market_cancelled |
                               {:market_settled, boolean()}}
 
-  # State?
-
-  # Private methods
-  def insert_ordered([], bet), do: [bet]
-  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) when new_odd < odd do
-	  [{new_bet_id, new_user_id, new_odd, new_stake} | [{bet_id, user_id, odd, stake} | rest]]
-  end
-  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) do
-	  [{bet_id, user_id, odd, stake} | insert_ordered(rest,{new_bet_id, new_user_id, new_odd, new_stake})]
-  end
-
-  def init(_) do
-    {:ok, []}
-  end
+  @type server_state :: %{server: atom(), db: atom()}
 
   # Exchange interaction
-  #@spec start_link(name :: String.t()) :: {:ok, pid()}
+  @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
-    # Open a previous DB
-    {:ok, dets} = :dets.open_file("./data/" <> name <> ".dets", [])
-
-    # Transform it into ETS
-    :ets.from_dets(:ets.new(:state, [:set, :public, {:keypos, 1}, :named_table]), dets)
-
-    # Check if it was empty
-    case :ets.tab2list(:state) do
-      # If newly created, create the map for the users
-      [] -> :ets.insert(:state, {:users, %{}})
-    end
-
+    # Start the DB
+    CubDB.start_link(data_dir: "./data/" <> name, name: String.to_atom(name))
     # Start the server
-    GenServer.start_link(BetUnfair, [], name: :bet_unfair)
+    GenServer.start_link(BetUnfair, %{server: :bet_unfair, db: String.to_atom(name)}, name: :bet_unfair)
   end
 
-  @spec stop() :: :ok
+  @spec stop() :: :ok | {:error, :db_not_started | :server_not_started}
   def stop() do
-    #:dets.from_ets(
-    #  :dets.open_file("./data/" <> name <> ".dets", [])
-    #)
+    case GenServer.call(:bet_unfair, :stop_db) do
+      {:error, :not_started} -> {:error, :db_not_started}
+      :ok -> :ok
+    end
     GenServer.stop(:bet_unfair)
   end
 
   @spec clean(name :: String.t()) :: :ok
   def clean(name) do
-    File.rm("./data/" <> name <> ".dets")
-    GenServer.stop(String.to_atom(name))
+    # Check if DB is running
+    case Process.whereis(String.to_atom(name)) do
+      nil -> :ok
+      _ ->
+        # Stop the DB
+        CubDB.stop(String.to_atom(name))
+    end
+    # Delete the DB (in case it exists)
+    path = "./data/" <> name
+    File.rm_rf(path)
+    # Check if server is running
+    case Process.whereis(:bet_unfair) do
+      nil -> :ok
+      _ ->
+        # Stop the server
+        GenServer.stop(:bet_unfair)
+    end
   end
 
   # User interaction
-  @spec user_create(id :: String.t(), name :: String.t()) :: {:ok, user_id()} | :error
+  @spec user_create(id :: String.t(), name :: String.t()) :: {:ok, user_id()}
   def user_create(id, name) do
-    {:ok, id}
+    GenServer.call(:bet_unfair, {:user_create, id, name})
   end
 
   @spec user_deposit(id :: user_id(), amount :: pos_integer()) :: :ok | :error
@@ -200,5 +193,49 @@ defmodule BetUnfair do
             remaining_stake: 1500,
             matched_bets: [0,1,2],
             status: :active}}
+  end
+
+  # GenServer Functions
+  @spec init(%{server: atom(), db: atom()}) :: {:ok, %{server: atom(), db: atom()}}
+  def init(state) do
+    {:ok, state}
+  end
+
+  def handle_call(:stop_db, _from, state) do
+    case Map.get(state, :db) do
+      nil -> {:reply, {:error, :not_started}, state}
+      name ->
+        path = "./data/" <> Atom.to_string(name)
+        # Create backup
+        File.mkdir("./swap")
+        CubDB.back_up(name, "./swap/" <> Atom.to_string(name))
+        # Delete previous directory if exists
+        File.rm_rf(path)
+        # Move backup to data directory
+        File.mkdir(path)
+        File.copy("./swap/" <> Atom.to_string(name) <> "/0.cub", path <> "/0.cub")
+        # Delete swap directory
+        File.rm_rf("./swap/" <> Atom.to_string(name))
+        # Stop the DB
+        CubDB.stop(name)
+        {:reply, :ok, state}
+    end
+  end
+
+  def handle_call({:user_create, id, name}, _from, state) do
+    db = Map.get(state, :db)
+    case CubDB.put_new(db, id, {name, 0}) do
+      :ok -> {:reply, {:ok, id}, state}
+      {:error, _} -> {:reply, {:error, :exists}, state}
+    end
+  end
+
+  # Private functions
+  def insert_ordered([], bet), do: [bet]
+  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) when new_odd < odd do
+	  [{new_bet_id, new_user_id, new_odd, new_stake} | [{bet_id, user_id, odd, stake} | rest]]
+  end
+  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) do
+	  [{bet_id, user_id, odd, stake} | insert_ordered(rest,{new_bet_id, new_user_id, new_odd, new_stake})]
   end
 end
