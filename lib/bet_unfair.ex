@@ -1,5 +1,6 @@
 defmodule BetUnfair do
   use GenServer
+
   @moduledoc """
   A betting exchange system that allows users to place bets on different markets.
   """
@@ -10,22 +11,29 @@ defmodule BetUnfair do
 
   # Market types specification
   @type market_id :: String.t()
-  @type market_info :: %{name: String.t(), description: String.t(), status: :active | :frozen | :cancelled | {:settled, boolean()}}
+  @type market_info :: %{
+          name: String.t(),
+          description: String.t(),
+          status: :active | :frozen | :cancelled | {:settled, boolean()}
+        }
 
   # Bet types specification
   @type bet_id :: integer()
   @type bet_odd :: {pos_integer(), bet_id()}
-  @type bet_info :: %{odds: pos_integer(),
-                      bet_type: :back | :lay,
-                      market_id: market_id(),
-                      user_id: user_id(),
-                      original_stake: pos_integer(),
-                      remaining_stake: pos_integer(),
-                      matched_bets: [bet_id()],
-                      status: :active |
-                              :cancelled |
-                              :market_cancelled |
-                              {:market_settled, boolean()}}
+  @type bet_info :: %{
+          odds: pos_integer(),
+          bet_type: :back | :lay,
+          market_id: market_id(),
+          user_id: user_id(),
+          original_stake: pos_integer(),
+          remaining_stake: pos_integer(),
+          matched_bets: [bet_id()],
+          status:
+            :active
+            | :cancelled
+            | :market_cancelled
+            | {:market_settled, boolean()}
+        }
 
   @type server_state :: %{server: atom(), db: atom()}
 
@@ -35,7 +43,9 @@ defmodule BetUnfair do
     # Start the DB
     CubDB.start_link(data_dir: "./data/" <> name, name: String.to_atom(name))
     # Start the server
-    GenServer.start_link(BetUnfair, %{server: :bet_unfair, db: String.to_atom(name)}, name: :bet_unfair)
+    GenServer.start_link(BetUnfair, %{server: :bet_unfair, db: String.to_atom(name)},
+      name: :bet_unfair
+    )
   end
 
   @spec stop() :: :ok | {:error, :db_not_started | :server_not_started}
@@ -44,6 +54,7 @@ defmodule BetUnfair do
       {:error, :not_started} -> {:error, :db_not_started}
       :ok -> :ok
     end
+
     GenServer.stop(:bet_unfair)
   end
 
@@ -51,17 +62,22 @@ defmodule BetUnfair do
   def clean(name) do
     # Check if DB is running
     case Process.whereis(String.to_atom(name)) do
-      nil -> :ok
+      nil ->
+        :ok
+
       _ ->
         # Stop the DB
         CubDB.stop(String.to_atom(name))
     end
+
     # Delete the DB (in case it exists)
     path = "./data/" <> name
     File.rm_rf(path)
     # Check if server is running
     case Process.whereis(:bet_unfair) do
-      nil -> :ok
+      nil ->
+        :ok
+
       _ ->
         # Stop the server
         GenServer.stop(:bet_unfair)
@@ -76,14 +92,20 @@ defmodule BetUnfair do
 
   @spec user_deposit(id :: user_id(), amount :: pos_integer()) :: :ok | :error
   def user_deposit(id, amount) do
-    # TODO
-    :ok
+    if amount < 1 do
+      :error
+    else
+      GenServer.call(:bet_unfair, {:user_deposit, id, amount})
+    end
   end
 
   @spec user_withdraw(id :: user_id(), amount :: pos_integer()) :: :ok | :error
-  def user_withdraw(id, ammount) do
-    # TODO
-    :ok
+  def user_withdraw(id, amount) do
+    if amount < 1 do
+      :error
+    else
+      GenServer.call(:bet_unfair, {:user_withdraw, id, amount})
+    end
   end
 
   @spec user_get(id :: user_id()) :: {:ok, user_info()} | :error
@@ -99,7 +121,8 @@ defmodule BetUnfair do
   end
 
   # Market interaction
-  @spec market_create(name :: String.t(), description :: String.t()) :: {:ok, market_id()} | :error
+  @spec market_create(name :: String.t(), description :: String.t()) ::
+          {:ok, market_id()} | :error
   def market_create(name, description) do
     # TODO
     {:ok, "Market1"}
@@ -117,13 +140,13 @@ defmodule BetUnfair do
     {:ok, ["Market1"]}
   end
 
-  @spec market_cancel(id :: market_id()):: :ok | :error
+  @spec market_cancel(id :: market_id()) :: :ok | :error
   def market_cancel(id) do
     # TODO
     :ok
   end
 
-  @spec market_freeze(id :: market_id()):: :ok | :error
+  @spec market_freeze(id :: market_id()) :: :ok | :error
   def market_freeze(id) do
     # TODO
     :ok
@@ -158,25 +181,35 @@ defmodule BetUnfair do
     {:ok, %{name: "Market1", description: "Soccer Market", status: :active}}
   end
 
-  @spec market_match(id :: market_id()):: :ok | :error
+  @spec market_match(id :: market_id()) :: :ok | :error
   def market_match(id) do
     :ok
   end
 
   # Bet interaction
-  @spec bet_back(user_id :: user_id(), market_id :: market_id(), stake :: pos_integer(), odds :: pos_integer()) :: {:ok, bet_id()} | :error
+  @spec bet_back(
+          user_id :: user_id(),
+          market_id :: market_id(),
+          stake :: pos_integer(),
+          odds :: pos_integer()
+        ) :: {:ok, bet_id()} | :error
   def bet_back(id, market_id, stake, odds) do
     # TODO
     {:ok, 0}
   end
 
-  @spec bet_lay(user_id :: user_id(), market_id :: market_id(), stake :: pos_integer(), odds :: pos_integer()) :: {:ok, bet_id()} | :error
+  @spec bet_lay(
+          user_id :: user_id(),
+          market_id :: market_id(),
+          stake :: pos_integer(),
+          odds :: pos_integer()
+        ) :: {:ok, bet_id()} | :error
   def bet_lay(id, market_id, stake, odds) do
     # TODO
     {:ok, 0}
   end
 
-  @spec bet_cancel(id :: bet_id()):: :ok | :error
+  @spec bet_cancel(id :: bet_id()) :: :ok | :error
   def bet_cancel(id) do
     # TODO
     :ok
@@ -185,14 +218,17 @@ defmodule BetUnfair do
   @spec bet_get(id :: bet_id()) :: {:ok, bet_info()} | :error
   def bet_get(id) do
     # TODO
-    {:ok, %{bet_type: :back,
-            market_id: "Market1",
-            user_id: "DNI-1234",
-            odds: 150,
-            original_stake: 2000,
-            remaining_stake: 1500,
-            matched_bets: [0,1,2],
-            status: :active}}
+    {:ok,
+     %{
+       bet_type: :back,
+       market_id: "Market1",
+       user_id: "DNI-1234",
+       odds: 150,
+       original_stake: 2000,
+       remaining_stake: 1500,
+       matched_bets: [0, 1, 2],
+       status: :active
+     }}
   end
 
   # GenServer Functions
@@ -203,7 +239,9 @@ defmodule BetUnfair do
 
   def handle_call(:stop_db, _from, state) do
     case Map.get(state, :db) do
-      nil -> {:reply, {:error, :not_started}, state}
+      nil ->
+        {:reply, {:error, :not_started}, state}
+
       name ->
         path = "./data/" <> Atom.to_string(name)
         # Create backup
@@ -224,18 +262,55 @@ defmodule BetUnfair do
 
   def handle_call({:user_create, id, name}, _from, state) do
     db = Map.get(state, :db)
+
     case CubDB.put_new(db, id, {name, 0}) do
       :ok -> {:reply, {:ok, id}, state}
       {:error, _} -> {:reply, {:error, :exists}, state}
     end
   end
 
+  def handle_call({:user_deposit, id, amount}, _from, state) do
+    db = Map.get(state, :db)
+
+    case CubDB.get_and_update(db, id, fn {name, curBalance} ->
+           {:ok, {name, curBalance + amount}}
+         end) do
+      :ok -> {:reply, :ok, state}
+      _ -> {:reply, :error, state}
+    end
+  end
+
+  def handle_call({:user_withdraw, id, amount}, _from, state) do
+    db = Map.get(state, :db)
+    user = CubDB.get(db, id)
+
+    case user do
+      {name, balance} when balance >= amount ->
+        {:reply, CubDB.put(db, id, {name, balance - amount}), state}
+
+      _ ->
+        {:reply, :error, state}
+    end
+  end
+
   # Private functions
   def insert_ordered([], bet), do: [bet]
-  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) when new_odd < odd do
-	  [{new_bet_id, new_user_id, new_odd, new_stake} | [{bet_id, user_id, odd, stake} | rest]]
+
+  def insert_ordered(
+        [{bet_id, user_id, odd, stake} | rest],
+        {new_bet_id, new_user_id, new_odd, new_stake}
+      )
+      when new_odd < odd do
+    [{new_bet_id, new_user_id, new_odd, new_stake} | [{bet_id, user_id, odd, stake} | rest]]
   end
-  def insert_ordered([{bet_id, user_id, odd, stake} | rest], {new_bet_id, new_user_id, new_odd, new_stake}) do
-	  [{bet_id, user_id, odd, stake} | insert_ordered(rest,{new_bet_id, new_user_id, new_odd, new_stake})]
+
+  def insert_ordered(
+        [{bet_id, user_id, odd, stake} | rest],
+        {new_bet_id, new_user_id, new_odd, new_stake}
+      ) do
+    [
+      {bet_id, user_id, odd, stake}
+      | insert_ordered(rest, {new_bet_id, new_user_id, new_odd, new_stake})
+    ]
   end
 end
