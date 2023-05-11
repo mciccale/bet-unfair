@@ -110,14 +110,12 @@ defmodule BetUnfair do
 
   @spec user_get(id :: user_id()) :: {:ok, user_info()} | :error
   def user_get(id) do
-    # TODO
-    {:ok, %{name: "Rama", id: id, balance: 0}}
+    GenServer.call(:bet_unfair,{:user_get,id})
   end
 
   @spec user_bets(id :: user_id()) :: Enum.t(bet_id()) | :error
   def user_bets(id) do
-    # TODO
-    [0]
+    GenServer.call(:bet_unfair,{:user_bet,id})
   end
 
   # Market interaction
@@ -263,7 +261,7 @@ defmodule BetUnfair do
   def handle_call({:user_create, id, name}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.put_new(db, id, {name, 0}) do
+    case CubDB.put_new(db, id, {name, 0,[]}) do
       :ok -> {:reply, {:ok, id}, state}
       {:error, _} -> {:reply, {:error, :exists}, state}
     end
@@ -272,8 +270,8 @@ defmodule BetUnfair do
   def handle_call({:user_deposit, id, amount}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.get_and_update(db, id, fn {name, curBalance} ->
-           {:ok, {name, curBalance + amount}}
+    case CubDB.get_and_update(db, id, fn {name, curBalance,bet_list} ->
+           {:ok, {name, curBalance + amount,bet_list}}
          end) do
       :ok -> {:reply, :ok, state}
       _ -> {:reply, :error, state}
@@ -285,14 +283,35 @@ defmodule BetUnfair do
     user = CubDB.get(db, id)
 
     case user do
-      {name, balance} when balance >= amount ->
-        {:reply, CubDB.put(db, id, {name, balance - amount}), state}
+      {name, balance,bet_list} when balance >= amount ->
+        {:reply, CubDB.put(db, id, {name, balance - amount,bet_list}), state}
 
       _ ->
         {:reply, :error, state}
     end
   end
 
+  def handle_call({:user_get,id},_from,state) do
+    db = Map.get(state, :db)
+    user = CubDB.get(db, id)
+    case user do
+      {name,balance,_} ->
+        {:reply,{:ok,%{name: name,id: id,balance: balance}},state}
+      _ ->
+        {:reply,:error,state}
+    end
+  end
+
+  def handle_call({:user_bet,id},_from,state) do
+    db = Map.get(state, :db)
+    user = CubDB.get(db, id)
+    case user do
+      {_,_,bet_list}->
+        {:reply,bet_list,state}
+      _ ->
+        {:reply,:error,state}
+    end
+  end
   # Private functions
   def insert_ordered([], bet), do: [bet]
 
