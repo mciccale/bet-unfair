@@ -41,11 +41,17 @@ defmodule BetUnfair.Server do
   @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
     # Start the DB
-    CubDB.start_link(data_dir: "./data/" <> name, name: String.to_atom(name))
+    {:ok, pid} =
+      CubDB.start_link(
+        data_dir: "./data/" <> name,
+        name: String.to_atom(name),
+        auto_file_sync: true
+      )
+
     # Start the server
     GenServer.start_link(
       BetUnfair.Server,
-      %{db: String.to_atom(name), markets: %{}},
+      %Structs.State{db: pid},
       name: :bet_unfair
     )
   end
@@ -139,7 +145,7 @@ defmodule BetUnfair.Server do
 
   @spec market_cancel(id :: market_id()) :: :ok | :error
   def market_cancel(id) do
-    GenServer.call(:bet_unfair, {:market_cancel,id})
+    GenServer.call(:bet_unfair, {:market_cancel, id})
   end
 
   @spec market_freeze(id :: market_id()) :: :ok | :error
@@ -239,20 +245,9 @@ defmodule BetUnfair.Server do
       nil ->
         {:reply, {:error, :not_started}, state}
 
-      name ->
-        path = "./data/" <> Atom.to_string(name)
-        # Create backup
-        File.mkdir("./swap")
-        CubDB.back_up(name, "./swap/" <> Atom.to_string(name))
-        # Delete previous directory if exists
-        File.rm_rf(path)
-        # Move backup to data directory
-        File.mkdir(path)
-        File.copy("./swap/" <> Atom.to_string(name) <> "/0.cub", path <> "/0.cub")
-        # Delete swap directory
-        File.rm_rf("./swap/" <> Atom.to_string(name))
+      pid ->
         # Stop the DB
-        CubDB.stop(name)
+        CubDB.stop(pid)
         {:reply, :ok, state}
     end
   end
@@ -319,8 +314,17 @@ defmodule BetUnfair.Server do
   def handle_call({:market_create, name, description}, _from, state) do
     with {:ok, pid} <- BetUnfair.MarketServer.start_link(name, description),
          markets <- Map.get(state, :markets),
-         new_state <- Map.put(state, :markets, Map.put(markets,name,{pid,%{ name: name,description: description,status: :active}})) do
-         {:reply, {:ok, name}, new_state}
+         new_state <-
+           Map.put(
+             state,
+             :markets,
+             Map.put(
+               markets,
+               name,
+               {pid, %Structs.Market_info{name: name, description: description, status: :active}}
+             )
+           ) do
+      {:reply, {:ok, name}, new_state}
     else
       _ -> {:reply, :error, state}
     end
@@ -328,16 +332,16 @@ defmodule BetUnfair.Server do
 
   def handle_call({:market_list}, _from, state) do
     markets = Map.get(state, :markets)
-    {:reply, {:ok, Map.keys(markets) }, state}
+    {:reply, {:ok, Map.keys(markets)}, state}
   end
 
   def handle_call({:market_list_active}, _from, state) do
-    market_active_list = Map.get(state, :markets)
-    |> Enum.map( fn ({_,{_,maps}}) -> maps end)
-    |> Enum.filter(fn (maps) -> Map.get(maps, :status) == :active end)
-    |> Enum.map(fn(maps) -> Map.get(maps,:name) end)
-    {:reply, {:ok,market_active_list},state}
+    market_active_list =
+      Map.get(state, :markets)
+      |> Enum.map(fn {_, {_, maps}} -> maps end)
+      |> Enum.filter(fn maps -> Map.get(maps, :status) == :active end)
+      |> Enum.map(fn maps -> Map.get(maps, :name) end)
+
+    {:reply, {:ok, market_active_list}, state}
   end
-
-
 end
