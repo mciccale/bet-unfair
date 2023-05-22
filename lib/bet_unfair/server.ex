@@ -134,14 +134,12 @@ defmodule BetUnfair.Server do
 
   @spec market_list_active() :: {:ok, [market_id()]} | :error
   def market_list_active() do
-    # TODO
-    {:ok, ["Market1"]}
+    GenServer.call(:bet_unfair, {:market_list_active})
   end
 
   @spec market_cancel(id :: market_id()) :: :ok | :error
   def market_cancel(id) do
-    # TODO
-    :ok
+    GenServer.call(:bet_unfair, {:market_cancel,id})
   end
 
   @spec market_freeze(id :: market_id()) :: :ok | :error
@@ -230,6 +228,7 @@ defmodule BetUnfair.Server do
   end
 
   # GenServer Functions
+
   @spec init(%{server: atom(), db: atom()}) :: {:ok, %{server: atom(), db: atom()}}
   def init(state) do
     {:ok, state}
@@ -319,36 +318,26 @@ defmodule BetUnfair.Server do
 
   def handle_call({:market_create, name, description}, _from, state) do
     with {:ok, pid} <- BetUnfair.MarketServer.start_link(name, description),
-         db <- Map.get(state, :db),
-         :ok <- CubDB.put_new(db, String.to_atom(name), pid) do
-      {:reply, {:ok, name}, state}
+         markets <- Map.get(state, :markets),
+         new_state <- Map.put(state, :markets, Map.put(markets,name,{pid,%{ name: name,description: description,status: :active}})) do
+         {:reply, {:ok, name}, new_state}
     else
       _ -> {:reply, :error, state}
     end
   end
 
   def handle_call({:market_list}, _from, state) do
-    db = Map.get(state, :db)
+    markets = Map.get(state, :markets)
+    {:reply, {:ok, Map.keys(markets) }, state}
   end
 
-  # Private functions
-  def insert_ordered([], bet), do: [bet]
-
-  def insert_ordered(
-        [{bet_id, user_id, odd, stake} | rest],
-        {new_bet_id, new_user_id, new_odd, new_stake}
-      )
-      when new_odd < odd do
-    [{new_bet_id, new_user_id, new_odd, new_stake} | [{bet_id, user_id, odd, stake} | rest]]
+  def handle_call({:market_list_active}, _from, state) do
+    market_active_list = Map.get(state, :markets)
+    |> Enum.map( fn ({_,{_,maps}}) -> maps end)
+    |> Enum.filter(fn (maps) -> Map.get(maps, :status) == :active end)
+    |> Enum.map(fn(maps) -> Map.get(maps,:name) end)
+    {:reply, {:ok,market_active_list},state}
   end
 
-  def insert_ordered(
-        [{bet_id, user_id, odd, stake} | rest],
-        {new_bet_id, new_user_id, new_odd, new_stake}
-      ) do
-    [
-      {bet_id, user_id, odd, stake}
-      | insert_ordered(rest, {new_bet_id, new_user_id, new_odd, new_stake})
-    ]
-  end
+
 end

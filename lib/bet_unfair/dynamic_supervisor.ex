@@ -6,5 +6,6 @@ defmodule BetUnfair.DynamicSupervisor do
     children = [
       {DynamicSupervisor, name: __MODULE__}
     ]
+
   end
 end

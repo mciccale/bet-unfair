@@ -66,6 +66,17 @@ defmodule BetUnfair.Server.Test do
     assert {:ok, "market1"} = BetUnfair.Server.market_create("market1", "descripcion")
   end
 
+  test "market_create2" do
+    assert :ok = BetUnfair.Server.clean("testdb")
+    assert {:ok, _} = BetUnfair.Server.start_link("testdb")
+    assert {:ok, "market2"} = BetUnfair.Server.market_create("market2", "")
+    assert {:ok, "market3"} = BetUnfair.Server.market_create("market3", "")
+    assert {:ok, "market4"} = BetUnfair.Server.market_create("market4", "")
+    assert {:ok,["market2","market3","market4"]} = BetUnfair.Server.market_list()
+    assert {:ok,["market2","market3","market4"]} = BetUnfair.Server.market_list_active()
+  end
+
+
   test "user_bet1" do
     assert {:ok, _} = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
