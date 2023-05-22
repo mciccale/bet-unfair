@@ -1,9 +1,8 @@
 defmodule BetUnfair.Server do
-  use GenServer
-
   @moduledoc """
   A betting exchange system that allows users to place bets on different markets.
   """
+  use GenServer
 
   # User types specification
   @type user_id :: String.t()
@@ -40,17 +39,14 @@ defmodule BetUnfair.Server do
   # Exchange interaction
   @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
-    # Start the DB
     {:ok, pid} =
       CubDB.start_link(
         data_dir: "./data/" <> name,
-        name: String.to_atom(name),
         auto_file_sync: true
       )
 
-    # Start the server
     GenServer.start_link(
-      BetUnfair.Server,
+      __MODULE__,
       %Structs.State{db: pid},
       name: :bet_unfair
     )
@@ -67,29 +63,19 @@ defmodule BetUnfair.Server do
   end
 
   @spec clean(name :: String.t()) :: :ok
-  def clean(name) do
-    # Check if DB is running
-    case Process.whereis(String.to_atom(name)) do
-      nil ->
-        :ok
-
-      _ ->
-        # Stop the DB
-        CubDB.stop(String.to_atom(name))
-    end
-
-    # Delete the DB (in case it exists)
-    path = "./data/" <> name
-    File.rm_rf(path)
-    # Check if server is running
+  def clean(_name) do
     case Process.whereis(:bet_unfair) do
       nil ->
-        :ok
+        nil
 
       _ ->
-        # Stop the server
+        GenServer.call(:bet_unfair, :stop_db)
         GenServer.stop(:bet_unfair)
     end
+
+    File.rm_rf("data")
+    File.mkdir("data")
+    :ok
   end
 
   # User interaction
@@ -123,7 +109,7 @@ defmodule BetUnfair.Server do
 
   @spec user_bets(id :: user_id()) :: Enum.t(bet_id()) | :error
   def user_bets(id) do
-    GenServer.call(:bet_unfair, {:user_bet, id})
+    GenServer.call(:bet_unfair, {:user_bets, id})
   end
 
   # Market interaction
@@ -135,12 +121,12 @@ defmodule BetUnfair.Server do
 
   @spec market_list() :: {:ok, [market_id()]} | :error
   def market_list() do
-    GenServer.call(:bet_unfair, {:market_list})
+    GenServer.call(:bet_unfair, :market_list)
   end
 
   @spec market_list_active() :: {:ok, [market_id()]} | :error
   def market_list_active() do
-    GenServer.call(:bet_unfair, {:market_list_active})
+    GenServer.call(:bet_unfair, :market_list_active)
   end
 
   @spec market_cancel(id :: market_id()) :: :ok | :error
@@ -233,25 +219,25 @@ defmodule BetUnfair.Server do
      }}
   end
 
-  # GenServer Functions
-
-  @spec init(%{server: atom(), db: atom()}) :: {:ok, %{server: atom(), db: atom()}}
+  # Callbacks
+  @impl true
   def init(state) do
     {:ok, state}
   end
 
+  @impl true
   def handle_call(:stop_db, _from, state) do
     case Map.get(state, :db) do
       nil ->
         {:reply, {:error, :not_started}, state}
 
       pid ->
-        # Stop the DB
         CubDB.stop(pid)
         {:reply, :ok, state}
     end
   end
 
+  @impl true
   def handle_call({:user_create, id, name}, _from, state) do
     db = Map.get(state, :db)
 
@@ -261,56 +247,60 @@ defmodule BetUnfair.Server do
     end
   end
 
+  @impl true
   def handle_call({:user_deposit, id, amount}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.get_and_update(db, id, fn {name, curBalance, bet_list} ->
-           {:ok, {name, curBalance + amount, bet_list}}
+    case CubDB.get_and_update(db, id, fn {name, balance, bets_list} ->
+           {:ok, {name, balance + amount, bets_list}}
          end) do
       :ok -> {:reply, :ok, state}
       _ -> {:reply, :error, state}
     end
   end
 
+  @impl true
   def handle_call({:user_withdraw, id, amount}, _from, state) do
     db = Map.get(state, :db)
-    user = CubDB.get(db, id)
 
-    case user do
-      {name, balance, bet_list} when balance >= amount ->
-        {:reply, CubDB.put(db, id, {name, balance - amount, bet_list}), state}
-
-      _ ->
-        {:reply, :error, state}
+    case CubDB.get_and_update(db, id, fn {name, balance, bets_list} ->
+           cond do
+             balance >= amount -> {:ok, {name, balance - amount, bets_list}}
+             true -> {:error, {name, balance, bets_list}}
+           end
+         end) do
+      :ok -> {:reply, :ok, state}
+      _ -> {:reply, :error, state}
     end
   end
 
+  @impl true
   def handle_call({:user_get, id}, _from, state) do
     db = Map.get(state, :db)
-    user = CubDB.get(db, id)
 
-    case user do
-      {name, balance, _} ->
-        {:reply, {:ok, %{name: name, id: id, balance: balance}}, state}
+    case CubDB.get(db, id) do
+      {name, balance, _bets_list} ->
+        {:reply, {:ok, %Structs.UserInfo{name: name, id: id, balance: balance}}, state}
 
       _ ->
         {:reply, :error, state}
     end
   end
 
-  def handle_call({:user_bet, id}, _from, state) do
+  @impl true
+  def handle_call({:user_bets, id}, _from, state) do
     db = Map.get(state, :db)
-    user = CubDB.get(db, id)
 
-    case user do
-      {_, _, bet_list} ->
-        {:reply, bet_list, state}
+    case CubDB.get(db, id) do
+      {_name, _balance, bets_list} ->
+        {:reply, bets_list, state}
 
       _ ->
         {:reply, :error, state}
     end
   end
 
+  @impl true
   def handle_call({:market_create, name, description}, _from, state) do
     with {:ok, pid} <- BetUnfair.MarketServer.start_link(name, description),
          markets <- Map.get(state, :markets),
@@ -321,7 +311,7 @@ defmodule BetUnfair.Server do
              Map.put(
                markets,
                name,
-               {pid, %Structs.Market_info{name: name, description: description, status: :active}}
+               {pid, %Structs.MarketInfo{name: name, description: description, status: :active}}
              )
            ) do
       {:reply, {:ok, name}, new_state}
@@ -330,17 +320,19 @@ defmodule BetUnfair.Server do
     end
   end
 
-  def handle_call({:market_list}, _from, state) do
+  @impl true
+  def handle_call(:market_list, _from, state) do
     markets = Map.get(state, :markets)
     {:reply, {:ok, Map.keys(markets)}, state}
   end
 
-  def handle_call({:market_list_active}, _from, state) do
+  @impl true
+  def handle_call(:market_list_active, _from, state) do
     market_active_list =
       Map.get(state, :markets)
-      |> Enum.map(fn {_, {_, maps}} -> maps end)
-      |> Enum.filter(fn maps -> Map.get(maps, :status) == :active end)
-      |> Enum.map(fn maps -> Map.get(maps, :name) end)
+      |> Enum.map(fn {_key, {_pid, market_info}} -> market_info end)
+      |> Enum.filter(fn market_info -> Map.get(market_info, :status) == :active end)
+      |> Enum.map(fn market_info -> Map.get(market_info, :name) end)
 
     {:reply, {:ok, market_active_list}, state}
   end

@@ -1,3 +1,3 @@
-defmodule Structs.Market_info do
-  defstruct [:name , :description, :status]
+defmodule Structs.MarketInfo do
+  defstruct [:name, :description, :status]
 end
