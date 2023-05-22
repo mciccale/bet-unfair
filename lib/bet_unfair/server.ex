@@ -1,4 +1,4 @@
-defmodule BetUnfair do
+defmodule BetUnfair.Server do
   use GenServer
 
   @moduledoc """
@@ -43,7 +43,9 @@ defmodule BetUnfair do
     # Start the DB
     CubDB.start_link(data_dir: "./data/" <> name, name: String.to_atom(name))
     # Start the server
-    GenServer.start_link(BetUnfair, %{server: :bet_unfair, db: String.to_atom(name)},
+    GenServer.start_link(
+      BetUnfair.Server,
+      %{db: String.to_atom(name), markets: %{}},
       name: :bet_unfair
     )
   end
@@ -110,26 +112,24 @@ defmodule BetUnfair do
 
   @spec user_get(id :: user_id()) :: {:ok, user_info()} | :error
   def user_get(id) do
-    GenServer.call(:bet_unfair,{:user_get,id})
+    GenServer.call(:bet_unfair, {:user_get, id})
   end
 
   @spec user_bets(id :: user_id()) :: Enum.t(bet_id()) | :error
   def user_bets(id) do
-    GenServer.call(:bet_unfair,{:user_bet,id})
+    GenServer.call(:bet_unfair, {:user_bet, id})
   end
 
   # Market interaction
   @spec market_create(name :: String.t(), description :: String.t()) ::
           {:ok, market_id()} | :error
   def market_create(name, description) do
-    # TODO
-    {:ok, "Market1"}
+    GenServer.call(:bet_unfair, {:market_create, name, description})
   end
 
   @spec market_list() :: {:ok, [market_id()]} | :error
   def market_list() do
-    # TODO
-    {:ok, ["Market1"]}
+    GenServer.call(:bet_unfair, {:market_list})
   end
 
   @spec market_list_active() :: {:ok, [market_id()]} | :error
@@ -261,7 +261,7 @@ defmodule BetUnfair do
   def handle_call({:user_create, id, name}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.put_new(db, id, {name, 0,[]}) do
+    case CubDB.put_new(db, id, {name, 0, []}) do
       :ok -> {:reply, {:ok, id}, state}
       {:error, _} -> {:reply, {:error, :exists}, state}
     end
@@ -270,8 +270,8 @@ defmodule BetUnfair do
   def handle_call({:user_deposit, id, amount}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.get_and_update(db, id, fn {name, curBalance,bet_list} ->
-           {:ok, {name, curBalance + amount,bet_list}}
+    case CubDB.get_and_update(db, id, fn {name, curBalance, bet_list} ->
+           {:ok, {name, curBalance + amount, bet_list}}
          end) do
       :ok -> {:reply, :ok, state}
       _ -> {:reply, :error, state}
@@ -283,35 +283,54 @@ defmodule BetUnfair do
     user = CubDB.get(db, id)
 
     case user do
-      {name, balance,bet_list} when balance >= amount ->
-        {:reply, CubDB.put(db, id, {name, balance - amount,bet_list}), state}
+      {name, balance, bet_list} when balance >= amount ->
+        {:reply, CubDB.put(db, id, {name, balance - amount, bet_list}), state}
 
       _ ->
         {:reply, :error, state}
     end
   end
 
-  def handle_call({:user_get,id},_from,state) do
+  def handle_call({:user_get, id}, _from, state) do
     db = Map.get(state, :db)
     user = CubDB.get(db, id)
+
     case user do
-      {name,balance,_} ->
-        {:reply,{:ok,%{name: name,id: id,balance: balance}},state}
+      {name, balance, _} ->
+        {:reply, {:ok, %{name: name, id: id, balance: balance}}, state}
+
       _ ->
-        {:reply,:error,state}
+        {:reply, :error, state}
     end
   end
 
-  def handle_call({:user_bet,id},_from,state) do
+  def handle_call({:user_bet, id}, _from, state) do
     db = Map.get(state, :db)
     user = CubDB.get(db, id)
+
     case user do
-      {_,_,bet_list}->
-        {:reply,bet_list,state}
+      {_, _, bet_list} ->
+        {:reply, bet_list, state}
+
       _ ->
-        {:reply,:error,state}
+        {:reply, :error, state}
     end
   end
+
+  def handle_call({:market_create, name, description}, _from, state) do
+    with {:ok, pid} <- BetUnfair.MarketServer.start_link(name, description),
+         db <- Map.get(state, :db),
+         :ok <- CubDB.put_new(db, String.to_atom(name), pid) do
+      {:reply, {:ok, name}, state}
+    else
+      _ -> {:reply, :error, state}
+    end
+  end
+
+  def handle_call({:market_list}, _from, state) do
+    db = Map.get(state, :db)
+  end
+
   # Private functions
   def insert_ordered([], bet), do: [bet]
 
