@@ -118,7 +118,10 @@ defmodule BetUnfair.Server do
   def market_create(name, description) do
     GenServer.call(:bet_unfair, {:market_create, name, description})
   end
-
+  def market_alive(name) do
+    pid =GenServer.call(:bet_unfair, {:market_alive, name})
+    GenServer.call(pid, :vivo)
+  end
   @spec market_list() :: {:ok, [market_id()]} | :error
   def market_list() do
     GenServer.call(:bet_unfair, :market_list)
@@ -181,9 +184,11 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-  def bet_back(id, market_id, stake, odds) do
+
+
+  def bet_back(user_id, market_id, stake, odds) do
     {:ok, pid, user_db} = GenServer.call(:bet_unfair, {:bet_back, market_id})
-    GenServer.call(pid, {:bet_back, id, stake, odds, user_db})
+    GenServer.call(pid, {:bet_back, user_id, stake, odds, user_db})
   end
 
   @spec bet_lay(
@@ -204,10 +209,10 @@ defmodule BetUnfair.Server do
   end
 
   @spec bet_get(id :: bet_id()) :: {:ok, bet_info()} | :error
+
   def bet_get(id) do
-    {:ok, market_id, id} = GenServer.call(:bet_unfair, {:bet_get, id})
-    {pid, _} = Map.get(state, :markets) |> Map.get(market_id)
-    CubDB.get(market_id, {:back, _, id})
+     {:ok, market_pid} = GenServer.call(:bet_unfair, {:bet_get, id})
+     GenServer.call(market_pid, {:bet_get, id})
   end
 
   # Callbacks
@@ -266,12 +271,12 @@ defmodule BetUnfair.Server do
   end
 
   @impl true
-  def handle_call({:user_get, id}, _from, state) do
+  def handle_call({:user_get, user_id}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.get(db, id) do
+    case CubDB.get(db, user_id) do
       {name, balance, _bets_list} ->
-        {:reply, {:ok, %Structs.UserInfo{name: name, id: id, balance: balance}}, state}
+        {:reply, {:ok, %Structs.UserInfo{name: name, id: user_id, balance: balance}}, state}
 
       _ ->
         {:reply, :error, state}
@@ -310,7 +315,11 @@ defmodule BetUnfair.Server do
       _ -> {:reply, :error, state}
     end
   end
-
+  def handle_call({:market_alive, name}, _from, state) do
+    markets = Map.get(state, :markets)
+    {pid, _} = Map.get(markets, name)
+    {:reply, pid, state}
+  end
   @impl true
   def handle_call(:market_list, _from, state) do
     markets = Map.get(state, :markets)
@@ -373,10 +382,16 @@ defmodule BetUnfair.Server do
 
     {market_id, bet_id} =
       Enum.find_value(users, fn {user_id, {_name, _money, bets}} ->
-        {market_id, bet_id} = Enum.find(bets, fn {_market, bet} -> bet == id end)
-        if bet_id == id, do: {market_id, bet_id}
+        {market, bet} = Enum.find(bets, fn {market, bet} -> bet == id end)
+        if bet == id do {market, bet} else {:error, :err} end
       end)
+    if market_id == :error do
+      {:reply, :error, state}
+    else
+      markets = Map.get(state, :markets)
+      {market_server_pid, _} = Map.get(markets, market_id)
+      {:reply, {:ok, market_server_pid}, state}
+    end
 
-    {:reply, {:ok, market_id, bet_id}, state}
   end
 end
