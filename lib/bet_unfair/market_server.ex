@@ -2,14 +2,12 @@ defmodule BetUnfair.MarketServer do
   use GenServer
 
   def start_link(name, description) do
-    CubDB.start_link(data_dir: "./data/" <> name, name: :db)
-    CubDB.put_new(:db, :description, description)
-    CubDB.put_new(:db, :backs, [])
-    CubDB.put_new(:db, :lays, [])
-    GenServer.start_link(__MODULE__, :ok, name: :market)
+    {:ok, pid} = CubDB.start_link(data_dir: "./data/" <> name)
+    CubDB.put_new(pid, :description, description)
+    GenServer.start_link(__MODULE__, pid, name: String.to_atom(name))
   end
 
-  def init(:ok) do
-    {:ok, %{}}
+  def init(pid) do
+    {:ok, pid}
   end
 end
