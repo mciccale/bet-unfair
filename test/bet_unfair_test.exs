@@ -86,6 +86,7 @@ defmodule BetUnfair.Server.Test do
     assert {:ok, m1} = BetUnfair.Server.market_create("rmw", "Real Madrid wins")
     assert :vivo = BetUnfair.Server.market_alive(m1)
     assert {:ok, l} = BetUnfair.Server.bet_lay(u1, m1, 1000, 150)
+
     assert {:ok,
             {0,
              %{
@@ -98,6 +99,7 @@ defmodule BetUnfair.Server.Test do
                matched_bets: [],
                status: :active
              }}} = BetUnfair.Server.bet_get(l)
+
     assert {:ok, b} = BetUnfair.Server.bet_back(u1, m1, 1000, 150)
 
     assert {:ok,
@@ -113,8 +115,6 @@ defmodule BetUnfair.Server.Test do
                status: :active
              }}} = BetUnfair.Server.bet_get(b)
 
-
-
     assert {:ok, markets} = BetUnfair.Server.market_list()
     assert 1 = length(markets)
     assert {:ok, markets} = BetUnfair.Server.market_list_active()
@@ -122,7 +122,7 @@ defmodule BetUnfair.Server.Test do
   end
 
   test "user_persist" do
-    assert {:ok, _} = BetUnfair.Server.clean("testdb")
+    assert :ok = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
     assert {:ok, u1} = BetUnfair.Server.user_create("u1", "Francisco Gonzalez")
     assert is_ok(BetUnfair.Server.user_deposit(u1, 2000))
@@ -130,12 +130,24 @@ defmodule BetUnfair.Server.Test do
     assert {:ok, m1} = BetUnfair.Server.market_create("rmw", "Real Madrid wins")
     assert {:ok, b} = BetUnfair.Server.bet_back(u1, m1, 1000, 150)
 
-    assert {:ok, %{id: ^b, bet_type: :back, stake: 1000, odds: 150, status: :active}} =
-             BetUnfair.Server.bet_get(b)
+    assert {:ok,
+            %{
+              odds: 150,
+              bet_type: :back,
+              market_id: m1,
+              user_id: u1,
+              original_stake: 1000,
+              remaining_stake: 1000,
+              matched_bets: [],
+              status: :active
+            }} = BetUnfair.Server.bet_get(b)
 
     assert is_ok(BetUnfair.Server.stop())
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
-    assert {:ok, %{balance: 1000}} = BetUnfair.Server.user_get(u1)
+
+    assert {:ok, %{name: "Francisco Gonzalez", id: "u1", balance: 1000}} =
+             BetUnfair.Server.user_get(u1)
+
     assert {:ok, markets} = BetUnfair.Server.market_list()
     assert 1 = length(markets)
     assert {:ok, markets} = BetUnfair.Server.market_list_active()
@@ -172,11 +184,21 @@ defmodule BetUnfair.Server.Test do
               user_id: u1,
               original_stake: 1000,
               remaining_stake: 0,
-              matched_bets: [],
+              matched_bets: [bl2],
               status: :active
             }} = BetUnfair.Server.bet_get(bb1)
 
-    assert {:ok, %{stake: 0}} = BetUnfair.Server.bet_get(bl2)
+    assert {:ok,
+            %{
+              odds: 150,
+              bet_type: :lay,
+              market_id: m1,
+              user_id: u2,
+              original_stake: 500,
+              remaining_stake: 0,
+              matched_bets: [bb1],
+              status: :active
+            }} = BetUnfair.Server.bet_get(bl2)
   end
 
   test "match_bets2" do
