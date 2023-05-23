@@ -118,10 +118,12 @@ defmodule BetUnfair.Server do
   def market_create(name, description) do
     GenServer.call(:bet_unfair, {:market_create, name, description})
   end
+
   def market_alive(name) do
-    pid =GenServer.call(:bet_unfair, {:market_alive, name})
+    pid = GenServer.call(:bet_unfair, {:market_alive, name})
     GenServer.call(pid, :vivo)
   end
+
   @spec market_list() :: {:ok, [market_id()]} | :error
   def market_list() do
     GenServer.call(:bet_unfair, :market_list)
@@ -174,7 +176,7 @@ defmodule BetUnfair.Server do
 
   @spec market_match(id :: market_id()) :: :ok | :error
   def market_match(id) do
-    :ok
+    GenServer.call(:bet_unfair, {:market_match, id})
   end
 
   # Bet interaction
@@ -184,7 +186,6 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-
 
   def bet_back(user_id, market_id, stake, odds) do
     {:ok, pid, user_db} = GenServer.call(:bet_unfair, {:bet_back, market_id})
@@ -211,8 +212,8 @@ defmodule BetUnfair.Server do
   @spec bet_get(id :: bet_id()) :: {:ok, bet_info()} | :error
 
   def bet_get(id) do
-     {:ok, market_pid} = GenServer.call(:bet_unfair, {:bet_get, id})
-     GenServer.call(market_pid, {:bet_get, id})
+    {:ok, market_pid} = GenServer.call(:bet_unfair, {:bet_get, id})
+    GenServer.call(market_pid, {:bet_get, id})
   end
 
   # Callbacks
@@ -315,11 +316,13 @@ defmodule BetUnfair.Server do
       _ -> {:reply, :error, state}
     end
   end
+
   def handle_call({:market_alive, name}, _from, state) do
     markets = Map.get(state, :markets)
     {pid, _} = Map.get(markets, name)
     {:reply, pid, state}
   end
+
   @impl true
   def handle_call(:market_list, _from, state) do
     markets = Map.get(state, :markets)
@@ -385,8 +388,14 @@ defmodule BetUnfair.Server do
     {market_id, bet_id} =
       Enum.find_value(users, fn {user_id, {_name, _money, bets}} ->
         {market, bet} = Enum.find(bets, fn {market, bet} -> bet == id end)
-        if bet == id do {market, bet} else {:error, :err} end
+
+        if bet == id do
+          {market, bet}
+        else
+          {:error, :err}
+        end
       end)
+
     if market_id == :error do
       {:reply, :error, state}
     else
@@ -394,6 +403,11 @@ defmodule BetUnfair.Server do
       {market_server_pid, _} = Map.get(markets, market_id)
       {:reply, {:ok, market_server_pid}, state}
     end
+  end
 
+  def handle_call({:market_match, id}, _from, state) do
+    {pid, _} = Map.get(Map.get(state, :markets), id)
+
+    {:reply, GenServer.call(pid, :market_match), state}
   end
 end
