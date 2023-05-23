@@ -118,7 +118,10 @@ defmodule BetUnfair.Server do
   def market_create(name, description) do
     GenServer.call(:bet_unfair, {:market_create, name, description})
   end
-
+  def market_alive(name) do
+    pid =GenServer.call(:bet_unfair, {:market_alive, name})
+    GenServer.call(pid, :vivo)
+  end
   @spec market_list() :: {:ok, [market_id()]} | :error
   def market_list() do
     GenServer.call(:bet_unfair, :market_list)
@@ -181,9 +184,11 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-  def bet_back(id, market_id, stake, odds) do
-    # TODO
-    {:ok, 0}
+
+
+  def bet_back(user_id, market_id, stake, odds) do
+    {:ok, pid, user_db} = GenServer.call(:bet_unfair, {:bet_back, market_id})
+    GenServer.call(pid, {:bet_back, user_id, stake, odds, user_db})
   end
 
   @spec bet_lay(
@@ -193,8 +198,8 @@ defmodule BetUnfair.Server do
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
   def bet_lay(id, market_id, stake, odds) do
-    # TODO
-    {:ok, 0}
+    {:ok, pid} = GenServer.call(:bet_unfair, {:bet_lay, market_id})
+    GenServer.call(pid, {:bet_lay, id, stake, odds})
   end
 
   @spec bet_cancel(id :: bet_id()) :: :ok | :error
@@ -204,19 +209,10 @@ defmodule BetUnfair.Server do
   end
 
   @spec bet_get(id :: bet_id()) :: {:ok, bet_info()} | :error
+
   def bet_get(id) do
-    # TODO
-    {:ok,
-     %{
-       bet_type: :back,
-       market_id: "Market1",
-       user_id: "DNI-1234",
-       odds: 150,
-       original_stake: 2000,
-       remaining_stake: 1500,
-       matched_bets: [0, 1, 2],
-       status: :active
-     }}
+     {:ok, market_pid} = GenServer.call(:bet_unfair, {:bet_get, id})
+     GenServer.call(market_pid, {:bet_get, id})
   end
 
   # Callbacks
@@ -275,12 +271,12 @@ defmodule BetUnfair.Server do
   end
 
   @impl true
-  def handle_call({:user_get, id}, _from, state) do
+  def handle_call({:user_get, user_id}, _from, state) do
     db = Map.get(state, :db)
 
-    case CubDB.get(db, id) do
+    case CubDB.get(db, user_id) do
       {name, balance, _bets_list} ->
-        {:reply, {:ok, %Structs.UserInfo{name: name, id: id, balance: balance}}, state}
+        {:reply, {:ok, %Structs.UserInfo{name: name, id: user_id, balance: balance}}, state}
 
       _ ->
         {:reply, :error, state}
@@ -319,7 +315,11 @@ defmodule BetUnfair.Server do
       _ -> {:reply, :error, state}
     end
   end
-
+  def handle_call({:market_alive, name}, _from, state) do
+    markets = Map.get(state, :markets)
+    {pid, _} = Map.get(markets, name)
+    {:reply, pid, state}
+  end
   @impl true
   def handle_call(:market_list, _from, state) do
     markets = Map.get(state, :markets)
@@ -335,5 +335,63 @@ defmodule BetUnfair.Server do
       |> Enum.map(fn market_info -> Map.get(market_info, :name) end)
 
     {:reply, {:ok, market_active_list}, state}
+  end
+
+  @impl true
+  def handle_call({:market_cancel, id}, _from, state) do
+    # TO-DO devolver el dinero
+    with markets <- Map.get(state, :markets),
+         market <- Map.get(markets, id),
+         new_state <-
+           Map.put(
+             state,
+             :markets,
+             Map.put(
+               markets,
+               id,
+               Map.put(market, :status, :cancelled)
+             )
+           ) do
+      {:reply, :ok, new_state}
+    else
+      _ -> {:reply, :error, state}
+    end
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:bet_back, market_id}, _from, state) do
+    markets = Map.get(state, :markets)
+    user_db = Map.get(state, :db)
+    {pid, _} = Map.get(markets, market_id)
+
+    {:reply, {:ok, pid, user_db}, state}
+  end
+
+  @impl true
+  def handle_call({:bet_lay, market_id}, _from, state) do
+    markets = Map.get(state, :markets)
+    {pid, _} = Map.get(markets, market_id)
+    {:reply, {:ok, pid}, state}
+  end
+
+  def handle_call({:bet_get, id}, _from, state) do
+    db = Map.get(state, :db)
+    users = CubDB.select(db) |> Enum.to_list()
+
+    {market_id, bet_id} =
+      Enum.find_value(users, fn {user_id, {_name, _money, bets}} ->
+        {market, bet} = Enum.find(bets, fn {market, bet} -> bet == id end)
+        if bet == id do {market, bet} else {:error, :err} end
+      end)
+    if market_id == :error do
+      {:reply, :error, state}
+    else
+      markets = Map.get(state, :markets)
+      {market_server_pid, _} = Map.get(markets, market_id)
+      {:reply, {:ok, market_server_pid}, state}
+    end
+
   end
 end
