@@ -127,6 +127,7 @@ defmodule BetUnfair.Server.Test do
     assert 1 = length(markets)
   end
 
+
   test "match_bets1" do
     assert :ok = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
