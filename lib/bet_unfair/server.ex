@@ -197,9 +197,9 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-  def bet_lay(id, market_id, stake, odds) do
-    {:ok, pid} = GenServer.call(:bet_unfair, {:bet_lay, market_id})
-    GenServer.call(pid, {:bet_lay, id, stake, odds})
+  def bet_lay(user_id, market_id, stake, odds) do
+    {:ok, pid, user_db} = GenServer.call(:bet_unfair, {:bet_lay, market_id})
+    GenServer.call(pid, {:bet_lay, user_id, stake, odds, user_db})
   end
 
   @spec bet_cancel(id :: bet_id()) :: :ok | :error
@@ -372,8 +372,10 @@ defmodule BetUnfair.Server do
   @impl true
   def handle_call({:bet_lay, market_id}, _from, state) do
     markets = Map.get(state, :markets)
+    user_db = Map.get(state, :db)
     {pid, _} = Map.get(markets, market_id)
-    {:reply, {:ok, pid}, state}
+
+    {:reply, {:ok, pid, user_db}, state}
   end
 
   def handle_call({:bet_get, id}, _from, state) do
