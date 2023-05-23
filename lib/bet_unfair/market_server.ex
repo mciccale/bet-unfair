@@ -115,12 +115,20 @@ defmodule BetUnfair.MarketServer do
   end
 
   def handle_call({:bet_get, bet_id}, _from, {market_name, market_db}) do
-    {id, bet_info} =
-      CubDB.select(market_db, min_key: {:a, 0, bet_id})
-      |> Enum.to_list()
-      |> Enum.find(fn {{_, _, id}, _} -> bet_id == id end)
+    algo = CubDB.select(market_db) |> Enum.to_list() |> find_bet(bet_id)
+    case algo do
+      :error -> {:reply, :error, {market_name, market_db}}
+      {^bet_id, bet_info} -> {:reply, {:ok, {bet_id, bet_info}}, {market_name, market_db}}
+    end
+  end
 
-    {:reply, {:ok, {id, bet_info}}, {market_name, market_db}}
+  defp find_bet([head | list], bet_id) do
+    case head do
+      [] -> :error
+      {{_, _, ^bet_id}, bet_info} -> {bet_id, bet_info}
+      _ ->
+        find_bet(list, bet_id)
+    end
   end
 
   def handle_call(:market_match, _from, {market_name, market_db}) do

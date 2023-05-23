@@ -194,7 +194,7 @@ defmodule BetUnfair.Server do
         ) :: {:ok, bet_id()} | :error
   def bet_lay(user_id, market_id, stake, odds) do
     {:ok, market_pid, user_db, bets_db, bet_id} = GenServer.call(:bet_unfair, {:bet_lay, market_id})
-    GenServer.call(market_pid, {:bet_back, user_id, stake, odds, user_db, bets_db, bet_id})
+    GenServer.call(market_pid, {:bet_lay, user_id, stake, odds, user_db, bets_db, bet_id})
   end
 
   @spec bet_cancel(id :: bet_id()) :: :ok | :error
