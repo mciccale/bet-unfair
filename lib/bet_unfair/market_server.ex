@@ -132,11 +132,11 @@ defmodule BetUnfair.MarketServer do
   @impl true
   def handle_call(:market_match, _from, state = {_market_name, market_db}) do
     backs =
-      CubDB.select(market_db, min_key: {:back, 0, nil})
+      CubDB.select(market_db, min_key: {:back, 0, nil}, max_key: {:back, nil, nil})
       |> Enum.to_list()
 
     lays =
-      CubDB.select(market_db, reverse: true, min_key: {:lay, 0, nil})
+      CubDB.select(market_db, reverse: true, min_key: {:lay, 0, nil}, max_key: {:lay, nil, nil})
       |> Enum.to_list()
 
     {new_backs, new_lays} = matching(backs, lays, market_db)
@@ -184,7 +184,7 @@ defmodule BetUnfair.MarketServer do
     back_stake = Map.get(back_info, :remaining_stake)
     lay_stake = Map.get(lay_info, :remaining_stake)
 
-    if back_stake * back_odd - back_stake >= lay_stake do
+    if Kernel.trunc(back_stake * (back_odd / 100) - back_stake) >= lay_stake do
       # Consume lay_stake and apply new back_stake with formulae 1
       # Backing stake = backing_stake- (lay_stake / (lay_odds - 1))
       new_back_stake = Kernel.trunc(back_stake - lay_stake / ((lay_odd - 100) / 100))
@@ -203,7 +203,7 @@ defmodule BetUnfair.MarketServer do
     else
       # Consume back_stake and apply new lay_stake with formulae 2
       # Lay stake= lay_stake - (backing stake*odds - backing stake)
-      new_lay_stake = lay_stake - (back_stake * back_odd - back_stake)
+      new_lay_stake = Kernel.trunc(lay_stake - (back_stake * (back_odd / 100) - back_stake))
 
       # Add to the field matched_bets the id of each other
       {_, new_lay_info} =

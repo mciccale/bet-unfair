@@ -202,7 +202,7 @@ defmodule BetUnfair.Server.Test do
   end
 
   test "match_bets2" do
-    assert {:ok, _} = BetUnfair.Server.clean("testdb")
+    assert :ok = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
     assert {:ok, u1} = BetUnfair.Server.user_create("u1", "Francisco Gonzalez")
     assert {:ok, u2} = BetUnfair.Server.user_create("u2", "Maria Fernandez")
@@ -218,12 +218,12 @@ defmodule BetUnfair.Server.Test do
     assert {:ok, bl2} = BetUnfair.Server.bet_lay(u2, m1, 1000, 150)
     assert {:ok, %{balance: 0}} = BetUnfair.Server.user_get(u2)
     assert is_ok(BetUnfair.Server.market_match(m1))
-    assert {:ok, %{stake: 0}} = BetUnfair.Server.bet_get(bb1)
-    assert {:ok, %{stake: 500}} = BetUnfair.Server.bet_get(bl2)
+    assert {:ok, %{remaining_stake: 0}} = BetUnfair.Server.bet_get(bb1)
+    assert {:ok, %{remaining_stake: 500}} = BetUnfair.Server.bet_get(bl2)
   end
 
   test "match_bets3" do
-    assert {:ok, _} = BetUnfair.Server.clean("testdb")
+    assert :ok = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
     assert {:ok, u1} = BetUnfair.Server.user_create("u1", "Francisco Gonzalez")
     assert {:ok, u2} = BetUnfair.Server.user_create("u2", "Maria Fernandez")
@@ -239,14 +239,14 @@ defmodule BetUnfair.Server.Test do
     assert {:ok, bl2} = BetUnfair.Server.bet_lay(u2, m1, 100, 150)
     assert {:ok, %{balance: 1800}} = BetUnfair.Server.user_get(u2)
     assert is_ok(BetUnfair.Server.market_match(m1))
-    assert {:ok, %{stake: 800}} = BetUnfair.Server.bet_get(bb1)
-    assert {:ok, %{stake: 0}} = BetUnfair.Server.bet_get(bl2)
+    assert {:ok, %{remaining_stake: 800}} = BetUnfair.Server.bet_get(bb1)
+    assert {:ok, %{remaining_stake: 0}} = BetUnfair.Server.bet_get(bl2)
     assert {:ok, user_bets} = BetUnfair.Server.user_bets(u1)
     assert 2 = length(user_bets)
   end
 
   test "match_bets4" do
-    assert {:ok, _} = BetUnfair.Server.clean("testdb")
+    assert :ok = BetUnfair.Server.clean("testdb")
     assert {:ok, _} = BetUnfair.Server.start_link("testdb")
     assert {:ok, u1} = BetUnfair.Server.user_create("u1", "Francisco Gonzalez")
     assert {:ok, u2} = BetUnfair.Server.user_create("u2", "Maria Fernandez")
