@@ -292,7 +292,7 @@ defmodule BetUnfair.Server do
   def handle_call({:user_bets, id}, _from, state = {users_db, _bets_db, _markets, _bet_id}) do
     case CubDB.get(users_db, id) do
       {_name, _balance, bets_list} ->
-        {:reply, bets_list, state}
+        {:reply, {:ok, bets_list}, state}
 
       _ ->
         {:reply, :error, state}
