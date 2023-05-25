@@ -39,7 +39,7 @@ defmodule BetUnfair.Server do
   # Exchange interaction
   @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
-    # Reinitialize markets
+
     {:ok, users_db} =
       CubDB.start_link(
         data_dir: "./data/" <> name <> "_users",
@@ -58,9 +58,11 @@ defmodule BetUnfair.Server do
 
     # Recuperar ultimo id de bets
 
+    bet_id = CubDB.select(bets_db) |> Enum.to_list() |> Enum.max(&>=/2, fn -> 0 end) #Trata el caso de que sea vacía la lista y devuelve 0
+
     GenServer.start_link(
       __MODULE__,
-      {users_db, bets_db, markets, 0},
+      {users_db, bets_db, markets, bet_id},
       name: :bet_unfair
     )
   end
