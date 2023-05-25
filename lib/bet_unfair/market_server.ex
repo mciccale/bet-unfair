@@ -24,47 +24,39 @@ defmodule BetUnfair.MarketServer do
         _from,
         state = {market_name, market_db}
       ) do
-    {_name, money, _bets} = CubDB.get(users_db, user_id)
+    res =
+      CubDB.get_and_update(users_db, user_id, fn {user_name, balance, bets} ->
+        cond do
+          balance >= stake ->
+            CubDB.put_new(
+              market_db,
+              {:back, odds, bet_id},
+              %{
+                odds: odds,
+                bet_type: :back,
+                market_id: market_name,
+                user_id: user_id,
+                original_stake: stake,
+                remaining_stake: stake,
+                matched_bets: [],
+                status: :active
+              }
+            )
 
-    if money >= stake do
-      CubDB.put_new(
-        market_db,
-        {:back, odds, bet_id},
-        %{
-          odds: odds,
-          bet_type: :back,
-          market_id: market_name,
-          user_id: user_id,
-          original_stake: stake,
-          remaining_stake: stake,
-          matched_bets: [],
-          status: :active
-        }
-      )
+            CubDB.put(
+              bets_db,
+              bet_id,
+              {user_id, market_name}
+            )
 
-      {user_name, money, bets} = CubDB.get(users_db, user_id)
+            {{:ok, bet_id}, {user_name, balance - stake, [bet_id | bets]}}
 
-      if money >= stake do
-        CubDB.put(
-          users_db,
-          user_id,
-          {user_name, money - stake, [bet_id | bets]}
-        )
+          true ->
+            {:error, {user_name, balance, bets}}
+        end
+      end)
 
-        CubDB.put(
-          bets_db,
-          bet_id,
-          {user_id, market_name}
-        )
-
-        {:reply, {:ok, bet_id}, state}
-      else
-        CubDB.delete(market_name, {:back, odds, bet_id})
-        {:reply, {:error, "Insufficient Money"}, state}
-      end
-    else
-      {:reply, {:error, "Insufficient Money"}, state}
-    end
+    {:reply, res, state}
   end
 
   @impl true
@@ -73,47 +65,39 @@ defmodule BetUnfair.MarketServer do
         _from,
         state = {market_name, market_db}
       ) do
-    {_name, money, _bets} = CubDB.get(users_db, user_id)
+    res =
+      CubDB.get_and_update(users_db, user_id, fn {user_name, balance, bets} ->
+        cond do
+          balance >= stake ->
+            CubDB.put_new(
+              market_db,
+              {:lay, odds, bet_id},
+              %{
+                odds: odds,
+                bet_type: :lay,
+                market_id: market_name,
+                user_id: user_id,
+                original_stake: stake,
+                remaining_stake: stake,
+                matched_bets: [],
+                status: :active
+              }
+            )
 
-    if money >= stake do
-      CubDB.put_new(
-        market_db,
-        {:lay, odds, bet_id},
-        %{
-          odds: odds,
-          bet_type: :lay,
-          market_id: market_name,
-          user_id: user_id,
-          original_stake: stake,
-          remaining_stake: stake,
-          matched_bets: [],
-          status: :active
-        }
-      )
+            CubDB.put(
+              bets_db,
+              bet_id,
+              {user_id, market_name}
+            )
 
-      {user_name, money, bets} = CubDB.get(users_db, user_id)
+            {{:ok, bet_id}, {user_name, balance - stake, [bet_id | bets]}}
 
-      if money >= stake do
-        CubDB.put(
-          users_db,
-          user_id,
-          {user_name, money - stake, [bet_id | bets]}
-        )
+          true ->
+            {:error, {user_name, balance, bets}}
+        end
+      end)
 
-        CubDB.put(
-          bets_db,
-          bet_id,
-          {user_id, market_name}
-        )
-
-        {:reply, {:ok, bet_id}, state}
-      else
-        CubDB.delete(market_name, {:lay, odds, bet_id})
-        {:reply, {:error, "Insufficient Money"}, state}
-      end
-    else
-      {:reply, {:error, "Insufficient Money"}, state}
-    end
+    {:reply, res, state}
   end
 
   @impl true
@@ -158,6 +142,7 @@ defmodule BetUnfair.MarketServer do
       }}, state}
   end
 
+  @impl true
   def handle_call({:market_cancel, users_db}, _from, state = {_market_name, market_db}) do
     CubDB.select(market_db, min_key: {:a, 0, 0})
     |> Enum.to_list()
@@ -175,6 +160,7 @@ defmodule BetUnfair.MarketServer do
     {:reply, :ok, state}
   end
 
+  @impl true
   def handle_call({:market_freeze, users_db}, _from, state = {_market_name, market_db}) do
     CubDB.select(market_db, min_key: {:a, 0, 0})
     |> Enum.to_list()
@@ -195,15 +181,93 @@ defmodule BetUnfair.MarketServer do
     {:reply, :ok, state}
   end
 
+  @impl true
+  def handle_call({:market_settle, true, users_db}, _from, state = {_market_name, market_db}) do
+    # remaining_stake + (original_stake - remaining_stake) * (odds / 100)
+    CubDB.select(market_db, min_key: {:a, 0, 0})
+    |> Enum.to_list()
+    |> Enum.each(fn {bet_key,
+                     %{
+                       bet_type: bet_type,
+                       original_stake: original_stake,
+                       remaining_stake: remaining_stake,
+                       odds: odds,
+                       user_id: user_id
+                     }} ->
+      case bet_type do
+        :back ->
+          CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+            {:ok,
+             {user_name,
+              user_balance +
+                Kernel.trunc(remaining_stake + (original_stake - remaining_stake) * (odds / 100)),
+              user_bets}}
+          end)
+
+        :lay ->
+          CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+            {:ok, {user_name, user_balance + remaining_stake, user_bets}}
+          end)
+      end
+
+      CubDB.get_and_update(market_db, bet_key, fn bet_info ->
+        {:ok, Map.put(bet_info, :status, {:market_settled, true})}
+      end)
+    end)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:market_settle, false, users_db}, _from, state = {_market_name, market_db}) do
+    # remaining_stake + (original_stake - remaining_stake) / ((odds - 100) / 100)
+    CubDB.select(market_db, min_key: {:a, 0, 0})
+    |> Enum.to_list()
+    |> Enum.each(fn {bet_key,
+                     %{
+                       bet_type: bet_type,
+                       original_stake: original_stake,
+                       remaining_stake: remaining_stake,
+                       odds: odds,
+                       user_id: user_id
+                     }} ->
+      case bet_type do
+        :back ->
+          CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+            {:ok, {user_name, user_balance + remaining_stake, user_bets}}
+          end)
+
+        :lay ->
+          CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+            {:ok,
+             {user_name,
+              user_balance +
+                Kernel.trunc(
+                  remaining_stake +
+                    (original_stake - remaining_stake) / ((odds - 100) / 100 * (odds / 100))
+                ), user_bets}}
+          end)
+      end
+
+      CubDB.get_and_update(market_db, bet_key, fn bet_info ->
+        {:ok, Map.put(bet_info, :status, {:market_settled, false})}
+      end)
+    end)
+
+    {:reply, :ok, state}
+  end
+
   defp matching(backs, lays, market_db) do
     case match_bets(backs, lays, market_db) do
       :error -> {backs, lays}
-      {[], []} -> {[], []}
+      {backs, []} -> {backs, []}
+      {[], lays} -> {[], lays}
       {new_backs, new_lays} -> matching(new_backs, new_lays, market_db)
     end
   end
 
-  defp match_bets([], [], _), do: {[], []}
+  defp match_bets([], lays, _), do: {[], lays}
+  defp match_bets(backs, [], _), do: {backs, []}
 
   defp match_bets(
          [{{:back, back_odd, _}, _} | _],
