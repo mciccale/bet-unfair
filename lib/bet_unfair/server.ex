@@ -147,8 +147,13 @@ defmodule BetUnfair.Server do
 
   @spec market_settle(id :: market_id(), result :: boolean()) :: :ok | :error
   def market_settle(id, result) do
-    {:ok, market_pid, users_db} = GenServer.call(:bet_unfair, {:market_settle, id})
-    GenServer.call(market_pid, {:market_settle, users_db})
+    case GenServer.call(:bet_unfair, {:market_settle, id, result}) do
+      :error ->
+        :error
+
+      {:ok, market_pid, users_db} ->
+        GenServer.call(market_pid, {:market_settle, result, users_db})
+    end
   end
 
   @spec market_bets(id :: market_id()) :: {:ok, Enum.t(bet_id())} | :error
@@ -184,11 +189,15 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-  def bet_back(user_id, market_id, stake, odds) do
-    {:ok, market_pid, user_db, bets_db, bet_id} =
-      GenServer.call(:bet_unfair, {:bet_back, market_id})
 
-    GenServer.call(market_pid, {:bet_back, user_id, stake, odds, user_db, bets_db, bet_id})
+  def bet_back(user_id, market_id, stake, odds) do
+    case GenServer.call(:bet_unfair, {:bet, market_id}) do
+      :error ->
+        :error
+
+      {:ok, market_pid, user_db, bets_db, bet_id} ->
+        GenServer.call(market_pid, {:bet_back, user_id, stake, odds, user_db, bets_db, bet_id})
+    end
   end
 
   @spec bet_lay(
@@ -197,11 +206,15 @@ defmodule BetUnfair.Server do
           stake :: pos_integer(),
           odds :: pos_integer()
         ) :: {:ok, bet_id()} | :error
-  def bet_lay(user_id, market_id, stake, odds) do
-    {:ok, market_pid, user_db, bets_db, bet_id} =
-      GenServer.call(:bet_unfair, {:bet_lay, market_id})
 
-    GenServer.call(market_pid, {:bet_lay, user_id, stake, odds, user_db, bets_db, bet_id})
+  def bet_lay(user_id, market_id, stake, odds) do
+    case GenServer.call(:bet_unfair, {:bet, market_id}) do
+      :error ->
+        :error
+
+      {:ok, market_pid, user_db, bets_db, bet_id} ->
+        GenServer.call(market_pid, {:bet_lay, user_id, stake, odds, user_db, bets_db, bet_id})
+    end
   end
 
   @spec bet_cancel(id :: bet_id()) :: :ok | :error
@@ -364,14 +377,13 @@ defmodule BetUnfair.Server do
         _from,
         state = {users_db, bets_db, markets, bet_id}
       ) do
-    # TO-DO devolver el dinero
     with {market_pid, market} <- Map.get(markets, market_id),
          :active <- Map.get(market, :status),
          new_markets <-
            Map.put(
              markets,
              market_id,
-             Map.put(market, :status, :cancelled)
+             {market_pid, Map.put(market, :status, :cancelled)}
            ) do
       {:reply, {:ok, market_pid, users_db}, {users_db, bets_db, new_markets, bet_id}}
     else
@@ -391,7 +403,7 @@ defmodule BetUnfair.Server do
            Map.put(
              markets,
              market_id,
-             Map.put(market, :status, :freeze)
+             {market_pid, Map.put(market, :status, :frozen)}
            ) do
       {:reply, {:ok, market_pid, users_db}, {users_db, bets_db, new_markets, bet_id}}
     else
@@ -403,9 +415,29 @@ defmodule BetUnfair.Server do
   def handle_call(
         {:market_settle, market_id, result},
         _from,
-        state = {_users_db, _bets_db, _markets, _bet_id}
+        state = {users_db, bets_db, markets, bet_id}
       ) do
-    # TODO
+    case Map.get(markets, market_id) do
+      {market_pid, market} ->
+        status = Map.get(market, :status)
+
+        if status == :active || status == :frozen do
+          IO.puts("SI")
+
+          {:reply, {:ok, market_pid, users_db},
+           {users_db, bets_db,
+            Map.put(
+              markets,
+              market_id,
+              {market_pid, Map.put(market, :status, {:settled, result})}
+            ), bet_id}}
+        else
+          {:reply, :error, state}
+        end
+
+      _ ->
+        {:reply, :error, state}
+    end
   end
 
   @impl true
@@ -446,19 +478,17 @@ defmodule BetUnfair.Server do
   end
 
   @impl true
-  def handle_call({:bet_back, market_id}, _from, _state = {users_db, bets_db, markets, bet_id}) do
-    {market_pid, _market_info} = Map.get(markets, market_id)
+  def handle_call({:bet, market_id}, _from, state = {users_db, bets_db, markets, bet_id}) do
+    {market_pid, market_info} = Map.get(markets, market_id)
 
-    {:reply, {:ok, market_pid, users_db, bets_db, bet_id},
-     {users_db, bets_db, markets, bet_id + 1}}
-  end
+    case Map.get(market_info, :status) do
+      :active ->
+        {:reply, {:ok, market_pid, users_db, bets_db, bet_id},
+         {users_db, bets_db, markets, bet_id + 1}}
 
-  @impl true
-  def handle_call({:bet_lay, market_id}, _from, _state = {users_db, bets_db, markets, bet_id}) do
-    {market_pid, _market_info} = Map.get(markets, market_id)
-
-    {:reply, {:ok, market_pid, users_db, bets_db, bet_id},
-     {users_db, bets_db, markets, bet_id + 1}}
+      _ ->
+        {:reply, :error, state}
+    end
   end
 
   @impl true
