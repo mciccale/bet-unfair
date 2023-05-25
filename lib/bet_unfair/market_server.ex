@@ -2,7 +2,7 @@ defmodule BetUnfair.MarketServer do
   use GenServer
 
   def start_link(name, description) do
-    {:ok, market_db} = CubDB.start_link(data_dir: "./data/" <> name, auto_file_sync: true)
+    {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
     CubDB.put_new(market_db, :description, description)
     CubDB.put_new(market_db, :status, :active)
     GenServer.start_link(__MODULE__, {name, market_db}, name: String.to_atom(name))
@@ -12,7 +12,9 @@ defmodule BetUnfair.MarketServer do
   def init(state) do
     {:ok, state}
   end
-
+  def handle_call(:stop_db, _from, state = {_name, market_db}) do
+    {:reply, CubDB.stop(market_db), state}
+  end
   @impl true
   def handle_call(:vivo, _from, state) do
     {:reply, :vivo, state}
