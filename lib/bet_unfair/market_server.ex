@@ -223,6 +223,7 @@ defmodule BetUnfair.MarketServer do
     # remaining_stake + (original_stake - remaining_stake) / ((odds - 100) / 100)
     CubDB.select(market_db, min_key: {:a, 0, 0})
     |> Enum.to_list()
+    |> Enum.filter(fn {_, %{status: status}} -> status == :active end)
     |> Enum.each(fn {bet_key,
                      %{
                        bet_type: bet_type,
@@ -238,13 +239,15 @@ defmodule BetUnfair.MarketServer do
           end)
 
         :lay ->
+          IO.puts((original_stake - remaining_stake) / ((odds - 100) / 100) * (odds / 100))
+
           CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
             {:ok,
              {user_name,
               user_balance +
                 Kernel.trunc(
                   remaining_stake +
-                    (original_stake - remaining_stake) / ((odds - 100) / 100 * (odds / 100))
+                    (original_stake - remaining_stake) / ((odds - 100) / 100) * (odds / 100)
                 ), user_bets}}
           end)
       end
