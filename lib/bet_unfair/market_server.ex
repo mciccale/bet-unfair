@@ -158,6 +158,43 @@ defmodule BetUnfair.MarketServer do
       }}, state}
   end
 
+  def handle_call({:market_cancel, users_db}, _from, state = {_market_name, market_db}) do
+    CubDB.select(market_db, min_key: {:a, 0, 0})
+    |> Enum.to_list()
+    |> Enum.each(fn {bet_key, %{original_stake: stake, user_id: user_id}} ->
+      CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+        {:ok, {user_name, user_balance + stake, user_bets}}
+      end)
+
+      CubDB.get_and_update(market_db, bet_key, fn bet_info ->
+        {:ok, Map.put(bet_info, :status, :market_cancelled)}
+      end)
+    end)
+
+    CubDB.put(market_db, :status, :cancelled)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:market_freeze, users_db}, _from, state = {_market_name, market_db}) do
+    CubDB.select(market_db, min_key: {:a, 0, 0})
+    |> Enum.to_list()
+    |> Enum.filter(fn {_, %{matched_bets: matched_bets}} ->
+      matched_bets == []
+    end)
+    |> Enum.each(fn {bet_key, %{original_stake: stake, user_id: user_id}} ->
+      CubDB.get_and_update(users_db, user_id, fn {user_name, user_balance, user_bets} ->
+        {:ok, {user_name, user_balance + stake, user_bets}}
+      end)
+
+      CubDB.get_and_update(market_db, bet_key, fn bet_info ->
+        {:ok, Map.put(bet_info, :status, :cancelled)}
+      end)
+    end)
+
+    CubDB.put(market_db, :status, :frozen)
+    {:reply, :ok, state}
+  end
+
   defp matching(backs, lays, market_db) do
     case match_bets(backs, lays, market_db) do
       :error -> {backs, lays}

@@ -135,17 +135,20 @@ defmodule BetUnfair.Server do
 
   @spec market_cancel(id :: market_id()) :: :ok | :error
   def market_cancel(id) do
-    GenServer.call(:bet_unfair, {:market_cancel, id})
+    {:ok, market_pid, users_db} = GenServer.call(:bet_unfair, {:market_cancel, id})
+    GenServer.call(market_pid, {:market_cancel, users_db})
   end
 
   @spec market_freeze(id :: market_id()) :: :ok | :error
   def market_freeze(id) do
-    GenServer.call(:bet_unfair, {:market_freeze, id})
+    {:ok, market_pid, users_db} = GenServer.call(:bet_unfair, {:market_freeze, id})
+    GenServer.call(market_pid, {:market_freeze, users_db})
   end
 
   @spec market_settle(id :: market_id(), result :: boolean()) :: :ok | :error
   def market_settle(id, result) do
-    GenServer.call(:bet_unfair, {:market_settle, id, result})
+    {:ok, market_pid, users_db} = GenServer.call(:bet_unfair, {:market_settle, id})
+    GenServer.call(market_pid, {:market_settle, users_db})
   end
 
   @spec market_bets(id :: market_id()) :: {:ok, Enum.t(bet_id())} | :error
@@ -347,28 +350,6 @@ defmodule BetUnfair.Server do
 
   @impl true
   def handle_call(
-        {:market_cancel, market_id},
-        _from,
-        state = {users_db, bets_db, markets, bet_id}
-      ) do
-    # TO-DO devolver el dinero
-    with market <- Map.get(markets, market_id),
-         new_markets <-
-           Map.put(
-             markets,
-             market_id,
-             Map.put(market, :status, :cancelled)
-           ) do
-      {:reply, :ok, {users_db, bets_db, new_markets, bet_id}}
-    else
-      _ -> {:reply, :error, state}
-    end
-
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call(
         {:market_match, market_id},
         _from,
         state = {_users_db, _bets_db, markets, _bet_id}
@@ -381,18 +362,41 @@ defmodule BetUnfair.Server do
   def handle_call(
         {:market_cancel, market_id},
         _from,
-        state = {_users_db, _bets_db, _markets, _bet_id}
+        state = {users_db, bets_db, markets, bet_id}
       ) do
-    # TODO
+    # TO-DO devolver el dinero
+    with {market_pid, market} <- Map.get(markets, market_id),
+         :active <- Map.get(market, :status),
+         new_markets <-
+           Map.put(
+             markets,
+             market_id,
+             Map.put(market, :status, :cancelled)
+           ) do
+      {:reply, {:ok, market_pid, users_db}, {users_db, bets_db, new_markets, bet_id}}
+    else
+      _ -> {:reply, :error, state}
+    end
   end
 
   @impl true
   def handle_call(
         {:market_freeze, market_id},
         _from,
-        state = {_users_db, _bets_db, _markets, _bet_id}
+        state = {users_db, bets_db, markets, bet_id}
       ) do
-    # TODO
+    with {market_pid, market} <- Map.get(markets, market_id),
+         :active <- Map.get(market, :status),
+         new_markets <-
+           Map.put(
+             markets,
+             market_id,
+             Map.put(market, :status, :freeze)
+           ) do
+      {:reply, {:ok, market_pid, users_db}, {users_db, bets_db, new_markets, bet_id}}
+    else
+      _ -> {:reply, :error, state}
+    end
   end
 
   @impl true
