@@ -108,13 +108,14 @@ defmodule BetUnfair.MarketServer do
   @impl true
   def handle_call({:bet_get, bet_id}, _from, state = {_market_name, market_db}) do
     bet =
-      CubDB.select(market_db)
+      CubDB.select(market_db, min_key: {:back, 0, nil}, max_key: {:lay, nil, nil})
+      |> Stream.filter(fn {{_, _, id}, _betinfo} -> id == bet_id end)
       |> Enum.to_list()
-      |> find_bet(bet_id)
 
     case bet do
-      :error -> {:reply, :error, state}
-      {{_, _, ^bet_id}, bet_info} -> {:reply, {:ok, bet_info}, state}
+      [{{_, _, ^bet_id}, bet_info}|[]] -> {:reply, {:ok, bet_info}, state}
+       _ -> {:reply, :error, state}
+
     end
   end
 
@@ -283,31 +284,26 @@ defmodule BetUnfair.MarketServer do
     {:reply, :ok, state}
   end
 
-  @impl true
-  def handle_call(:market_bets, _from, state = {_market_name, market_db}) do
-    bets =
-      CubDB.select(market_db, min_key: {:a, 0, 0})
-      |> Enum.to_list()
 
+  def handle_call(:market_bets, _from, state = {_market_name, market_db}) do
+    bets = CubDB.select(market_db, min_key: {:a, 0, 0})
     {:reply, {:ok, bets}, state}
   end
 
-  @impl true
   def handle_call(:market_pending_backs, _from, state = {_market_name, market_db}) do
     back_bets_pending =
       CubDB.select(market_db, min_key: {:back, 0, nil}, max_key: {:back, nil, nil})
-      |> Enum.to_list()
-      |> Enum.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
+      |> Stream.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
 
     {:reply, {:ok, back_bets_pending}, state}
   end
 
-  @impl true
+
   def handle_call(:market_pending_lays, _from, state = {_market_name, market_db}) do
     lay_bets_pending =
       CubDB.select(market_db, min_key: {:lay, 0, nil}, max_key: {:lay, nil, nil})
-      |> Enum.to_list()
-      |> Enum.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
+      |> Stream.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
+
 
     {:reply, {:ok, lay_bets_pending}, state}
   end
@@ -315,15 +311,14 @@ defmodule BetUnfair.MarketServer do
   @impl true
   def handle_call({:bet_cancel, bet_id, users_db}, _from, state = {_market_name, market_db}) do
     bet =
-      CubDB.select(market_db)
+      CubDB.select(market_db, min_key: {:back, 0, nil}, max_key: {:lay, nil, nil})
+      |> Stream.filter(fn {{_, _, id}, _betinfo} -> id == bet_id end)
       |> Enum.to_list()
-      |> find_bet(bet_id)
 
     case bet do
-      :error ->
-        {:reply, :error, state}
 
-      {bet_key, bet_info} ->
+      [{bet_key, bet_info} | []] ->
+
         CubDB.get_and_update(market_db, bet_key, fn %{
                                                       remaining_stake: remaining_stake,
                                                       user_id: user_id
@@ -336,6 +331,9 @@ defmodule BetUnfair.MarketServer do
         end)
 
         {:reply, :ok, state}
+
+      _ ->
+        {:reply, :error, state}
     end
   end
 
@@ -399,19 +397,6 @@ defmodule BetUnfair.MarketServer do
       end)
 
       {backs, [{lay_id, new_lay_info} | lays]}
-    end
-  end
-
-  defp find_bet([head | list], bet_id) do
-    case head do
-      [] ->
-        :error
-
-      {{_, _, ^bet_id}, _bet_info} ->
-        head
-
-      _ ->
-        find_bet(list, bet_id)
     end
   end
 end

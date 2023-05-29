@@ -21,7 +21,8 @@ defmodule BetUnfair.MixProject do
   # Run "mix help deps" to learn about dependencies.
   def deps do
     [
-      {:cubdb, "~> 2.0.2"}
+      {:cubdb, "~> 2.0.2"},
+      {:benchee, "~> 1.0", only: :dev}
     ]
   end
 end
