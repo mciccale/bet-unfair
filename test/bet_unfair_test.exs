@@ -39,8 +39,7 @@ defmodule BetUnfair.Test do
     assert is_error(BetUnfair.user_deposit(u1, 0))
     assert is_error(BetUnfair.user_deposit("u11", 0))
 
-    assert {:ok, %{name: "Francisco Gonzalez", id: "u1", balance: 2000}} =
-             BetUnfair.user_get(u1)
+    assert {:ok, %{name: "Francisco Gonzalez", id: "u1", balance: 2000}} = BetUnfair.user_get(u1)
   end
 
   test "user_create_deposit_withdraw_get" do
@@ -54,8 +53,7 @@ defmodule BetUnfair.Test do
     assert is_error(BetUnfair.user_deposit("u11", 0))
     assert is_ok(BetUnfair.user_withdraw(u1, 1000))
 
-    assert {:ok, %{name: "Francisco Gonzalez", id: "u1", balance: 1000}} =
-             BetUnfair.user_get(u1)
+    assert {:ok, %{name: "Francisco Gonzalez", id: "u1", balance: 1000}} = BetUnfair.user_get(u1)
 
     assert is_error(BetUnfair.user_get("u2"))
   end
@@ -67,11 +65,10 @@ defmodule BetUnfair.Test do
   end
 
   test "market_create2" do
-
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, "market2"} = BetUnfair.market_create("market2", "")
-    assert :vivo = BetUnfair.market_alive("market2")
+    assert true = BetUnfair.market_alive?("market2")
     assert {:ok, "market3"} = BetUnfair.market_create("market3", "")
     assert {:ok, "market4"} = BetUnfair.market_create("market4", "")
     assert {:ok, ["market2", "market3", "market4"]} = BetUnfair.market_list()
@@ -85,33 +82,34 @@ defmodule BetUnfair.Test do
     assert is_ok(BetUnfair.user_deposit(u1, 3000))
     assert {:ok, %{balance: 3000}} = BetUnfair.user_get(u1)
     assert {:ok, m1} = BetUnfair.market_create("rmw", "Real Madrid wins")
-    assert :vivo = BetUnfair.market_alive(m1)
+    assert true = BetUnfair.market_alive?(m1)
     assert {:ok, l} = BetUnfair.bet_lay(u1, m1, 1000, 150)
 
     assert {:ok,
-          %{
-               odds: 150,
-               bet_type: :lay,
-               market_id: m1,
-               user_id: u1,
-               original_stake: 1000,
-               remaining_stake: 1000,
-               matched_bets: [],
-               status: :active
-             }} = BetUnfair.bet_get(l)
-    assert {:ok, b} = BetUnfair.bet_back(u1, m1, 1000, 150)
-    assert {:ok,
-        %{
-               odds: 150,
-               bet_type: :back,
-               market_id: m1,
-               user_id: u1,
-               original_stake: 1000,
-               remaining_stake: 1000,
-               matched_bets: [],
-               status: :active
-             }} = BetUnfair.bet_get(b)
+            %{
+              odds: 150,
+              bet_type: :lay,
+              market_id: m1,
+              user_id: u1,
+              original_stake: 1000,
+              remaining_stake: 1000,
+              matched_bets: [],
+              status: :active
+            }} = BetUnfair.bet_get(l)
 
+    assert {:ok, b} = BetUnfair.bet_back(u1, m1, 1000, 150)
+
+    assert {:ok,
+            %{
+              odds: 150,
+              bet_type: :back,
+              market_id: m1,
+              user_id: u1,
+              original_stake: 1000,
+              remaining_stake: 1000,
+              matched_bets: [],
+              status: :active
+            }} = BetUnfair.bet_get(b)
 
     assert {:ok, markets} = BetUnfair.market_list()
     assert 1 = length(markets)
@@ -120,7 +118,6 @@ defmodule BetUnfair.Test do
   end
 
   test "user_persist" do
-
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, u1} = BetUnfair.user_create("u1", "Francisco Gonzalez")
@@ -166,10 +163,16 @@ defmodule BetUnfair.Test do
     assert {:ok, bl1} = BetUnfair.bet_lay(u2, m1, 500, 140)
     assert {:ok, bl2} = BetUnfair.bet_lay(u2, m1, 500, 150)
     assert {:ok, %{balance: 1000}} = BetUnfair.user_get(u2)
-    # assert {:ok, backs} = BetUnfair.market_pending_backs(m1)
-    # assert [^bb1, ^bb2] = Enum.to_list(backs) |> Enum.map(fn e -> elem(e, 1) end)
-    # assert {:ok, lays} = BetUnfair.market_pending_lays(m1)
-    # assert [^bl2, ^bl1] = Enum.to_list(lays) |> Enum.map(fn e -> elem(e, 1) end)
+    assert {:ok, backs} = BetUnfair.market_pending_backs(m1)
+
+    assert [^bb1, ^bb2] =
+             Enum.to_list(backs) |> Enum.map(fn {{_type, _odds, id}, _bet_info} -> id end)
+
+    assert {:ok, lays} = BetUnfair.market_pending_lays(m1)
+
+    assert [^bl1, ^bl2] =
+             Enum.to_list(lays) |> Enum.map(fn {{_type, _odds, id}, _bet_info} -> id end)
+
     assert is_ok(BetUnfair.market_match(m1))
 
     assert {:ok,
