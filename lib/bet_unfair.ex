@@ -29,58 +29,30 @@ defmodule BetUnfair do
             | {:market_settled, boolean()}
         }
 
-  @type server_state :: %{server: atom(), db: atom()}
-
   # Exchange interaction
   @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
-    {:ok, users_db} =
-      CubDB.start_link(
-        data_dir: "./data/" <> name <> "_users",
-        auto_file_sync: true
-      )
-
-    {:ok, bets_db} =
-      CubDB.start_link(
-        data_dir: "./data/" <> name <> "_bets",
-        auto_file_sync: true
-      )
-
-    File.mkdir("./data/markets")
-    {:ok, files} = File.ls("./data/markets")
-    markets = start_markets(files, %{})
-
-    # Recuperar ultimo id de bets
-
-    # Trata el caso de que sea vacía la lista y devuelve 0
-    bet_id = CubDB.select(bets_db) |> Enum.to_list() |> Enum.max(&>=/2, fn -> 0 end)
-
-    GenServer.start_link(
-      BetUnfair.Server,
-      {users_db, bets_db, markets, bet_id},
-      name: :bet_unfair
-    )
+    BetUnfair.Supervisor.start_link(name, name: :bet_unfair_supervisor)
   end
 
   @spec stop() :: :ok
   def stop() do
     GenServer.call(:bet_unfair, :stop_db)
     GenServer.stop(:bet_unfair)
+    DynamicSupervisor.stop(:bet_unfair_dynamic_supervisor)
+    Supervisor.stop(:bet_unfair_supervisor)
   end
 
   @spec clean(name :: String.t()) :: :ok
   def clean(_name) do
     case Process.whereis(:bet_unfair) do
-      nil ->
-        nil
-
-      _ ->
-        GenServer.call(:bet_unfair, :stop_db)
-        GenServer.stop(:bet_unfair)
+      nil -> nil
+      _ -> stop()
     end
 
     File.rm_rf("data")
     File.mkdir("data")
+
     :ok
   end
 
@@ -121,9 +93,9 @@ defmodule BetUnfair do
     GenServer.call(:bet_unfair, {:market_create, name, description})
   end
 
-  def market_alive(name) do
-    pid = GenServer.call(:bet_unfair, {:market_alive, name})
-    GenServer.call(pid, :vivo)
+  def market_alive?(name) do
+    pid = GenServer.call(:bet_unfair, {:market_alive?, name})
+    GenServer.call(pid, :market_alive?)
   end
 
   @spec market_list() :: {:ok, [market_id()]} | :error

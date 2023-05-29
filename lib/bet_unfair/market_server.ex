@@ -1,5 +1,5 @@
 defmodule BetUnfair.MarketServer do
-  use GenServer
+  use GenServer, restart: :transient
 
   def start_link(name, description) do
     {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
@@ -19,8 +19,8 @@ defmodule BetUnfair.MarketServer do
   end
 
   @impl true
-  def handle_call(:alive?, _from, state) do
-    {:reply, :ok, state}
+  def handle_call(:market_alive?, _from, state) do
+    {:reply, true, state}
   end
 
   @impl true
@@ -113,9 +113,8 @@ defmodule BetUnfair.MarketServer do
       |> Enum.to_list()
 
     case bet do
-      [{{_, _, ^bet_id}, bet_info}|[]] -> {:reply, {:ok, bet_info}, state}
-       _ -> {:reply, :error, state}
-
+      [{{_, _, ^bet_id}, bet_info} | []] -> {:reply, {:ok, bet_info}, state}
+      _ -> {:reply, :error, state}
     end
   end
 
@@ -129,8 +128,13 @@ defmodule BetUnfair.MarketServer do
       CubDB.select(market_db, reverse: true, min_key: {:lay, 0, nil}, max_key: {:lay, nil, nil})
       |> Enum.to_list()
 
-    {new_backs, new_lays} = matching(backs, lays, market_db)
+    # spawn(fn ->
+    #   {new_backs, new_lays} = matching(backs, lays, market_db)
+    #   Enum.each(new_backs, fn {key, value} -> CubDB.put(market_db, key, value) end)
+    #   Enum.each(new_lays, fn {key, value} -> CubDB.put(market_db, key, value) end)
+    # end)
 
+    {new_backs, new_lays} = matching(backs, lays, market_db)
     Enum.each(new_backs, fn {key, value} -> CubDB.put(market_db, key, value) end)
     Enum.each(new_lays, fn {key, value} -> CubDB.put(market_db, key, value) end)
 
@@ -284,7 +288,6 @@ defmodule BetUnfair.MarketServer do
     {:reply, :ok, state}
   end
 
-
   def handle_call(:market_bets, _from, state = {_market_name, market_db}) do
     bets = CubDB.select(market_db, min_key: {:a, 0, 0})
     {:reply, {:ok, bets}, state}
@@ -298,12 +301,10 @@ defmodule BetUnfair.MarketServer do
     {:reply, {:ok, back_bets_pending}, state}
   end
 
-
   def handle_call(:market_pending_lays, _from, state = {_market_name, market_db}) do
     lay_bets_pending =
       CubDB.select(market_db, min_key: {:lay, 0, nil}, max_key: {:lay, nil, nil})
       |> Stream.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
-
 
     {:reply, {:ok, lay_bets_pending}, state}
   end
@@ -316,9 +317,7 @@ defmodule BetUnfair.MarketServer do
       |> Enum.to_list()
 
     case bet do
-
       [{bet_key, bet_info} | []] ->
-
         CubDB.get_and_update(market_db, bet_key, fn %{
                                                       remaining_stake: remaining_stake,
                                                       user_id: user_id
