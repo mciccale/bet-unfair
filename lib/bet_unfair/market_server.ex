@@ -13,13 +13,14 @@ defmodule BetUnfair.MarketServer do
     {:ok, state}
   end
 
+  @impl true
   def handle_call(:stop_db, _from, state = {_name, market_db}) do
     {:reply, CubDB.stop(market_db), state}
   end
 
   @impl true
-  def handle_call(:vivo, _from, state) do
-    {:reply, :vivo, state}
+  def handle_call(:alive?, _from, state) do
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -114,6 +115,7 @@ defmodule BetUnfair.MarketServer do
     case bet do
       [{{_, _, ^bet_id}, bet_info}|[]] -> {:reply, {:ok, bet_info}, state}
        _ -> {:reply, :error, state}
+
     end
   end
 
@@ -282,6 +284,7 @@ defmodule BetUnfair.MarketServer do
     {:reply, :ok, state}
   end
 
+
   def handle_call(:market_bets, _from, state = {_market_name, market_db}) do
     bets = CubDB.select(market_db, min_key: {:a, 0, 0})
     {:reply, {:ok, bets}, state}
@@ -295,10 +298,12 @@ defmodule BetUnfair.MarketServer do
     {:reply, {:ok, back_bets_pending}, state}
   end
 
+
   def handle_call(:market_pending_lays, _from, state = {_market_name, market_db}) do
     lay_bets_pending =
       CubDB.select(market_db, min_key: {:lay, 0, nil}, max_key: {:lay, nil, nil})
       |> Stream.filter(fn {_, %{matched_bets: matched_bets}} -> matched_bets == [] end)
+
 
     {:reply, {:ok, lay_bets_pending}, state}
   end
@@ -311,7 +316,9 @@ defmodule BetUnfair.MarketServer do
       |> Enum.to_list()
 
     case bet do
+
       [{bet_key, bet_info} | []] ->
+
         CubDB.get_and_update(market_db, bet_key, fn %{
                                                       remaining_stake: remaining_stake,
                                                       user_id: user_id

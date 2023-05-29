@@ -67,6 +67,7 @@ defmodule BetUnfair.Test do
   end
 
   test "market_create2" do
+
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, "market2"} = BetUnfair.market_create("market2", "")
@@ -111,6 +112,7 @@ defmodule BetUnfair.Test do
                status: :active
              }} = BetUnfair.bet_get(b)
 
+
     assert {:ok, markets} = BetUnfair.market_list()
     assert 1 = length(markets)
     assert {:ok, markets} = BetUnfair.market_list_active()
@@ -118,6 +120,7 @@ defmodule BetUnfair.Test do
   end
 
   test "user_persist" do
+
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, u1} = BetUnfair.user_create("u1", "Francisco Gonzalez")
@@ -125,6 +128,7 @@ defmodule BetUnfair.Test do
     assert {:ok, %{balance: 2000}} = BetUnfair.user_get(u1)
     assert {:ok, m1} = BetUnfair.market_create("rmw", "Real Madrid wins")
     assert {:ok, b} = BetUnfair.bet_back(u1, m1, 1000, 150)
+
     assert {:ok,
             %{
               odds: 150,
