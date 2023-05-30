@@ -38,7 +38,7 @@ defmodule BetUnfair do
   @spec stop() :: :ok
   def stop() do
     GenServer.call(:bet_unfair, :stop_db)
-    GenServer.stop(:bet_unfair)
+    Supervisor.terminate_child(:bet_unfair_supervisor, :bet_unfair)
     DynamicSupervisor.stop(:bet_unfair_dynamic_supervisor)
     Supervisor.stop(:bet_unfair_supervisor)
   end
@@ -205,25 +205,5 @@ defmodule BetUnfair do
   def bet_get(id) do
     {:ok, market_pid} = GenServer.call(:bet_unfair, {:bet_get, id})
     GenServer.call(market_pid, {:bet_get, id})
-  end
-
-  defp start_markets([], markets) do
-    markets
-  end
-
-  defp start_markets([name | files], markets) do
-    {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
-    description = CubDB.get(market_db, :description)
-    :ok = CubDB.stop(market_db)
-    {:ok, market_pid} = BetUnfair.MarketServer.start_link(name, description)
-
-    new_markets =
-      Map.put(
-        markets,
-        name,
-        {market_pid, %Structs.MarketInfo{name: name, description: description, status: :active}}
-      )
-
-    start_markets(files, new_markets)
   end
 end

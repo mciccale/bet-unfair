@@ -15,7 +15,8 @@ defmodule BetUnfair.MarketServer do
 
   @impl true
   def handle_call(:stop_db, _from, state = {_name, market_db}) do
-    {:reply, CubDB.stop(market_db), state}
+    CubDB.stop(market_db)
+    {:reply, :ok, state}
   end
 
   @impl true

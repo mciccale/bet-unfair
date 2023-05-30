@@ -2,7 +2,7 @@ defmodule BetUnfair.Server do
   @moduledoc """
   A betting exchange system that allows users to place bets on different markets.
   """
-  use GenServer, restart: :transient
+  use GenServer
 
   @spec start_link(name :: String.t()) :: {:ok, pid()} | {:error, {:already_started, pid()}}
   def start_link(name) do
@@ -60,7 +60,7 @@ defmodule BetUnfair.Server do
 
         true ->
           GenServer.call(market_pid, :stop_db)
-          GenServer.stop(market_pid)
+          DynamicSupervisor.terminate_child(:bet_unfair_dynamic_supervisor, market_pid)
       end
     end)
 
@@ -138,8 +138,8 @@ defmodule BetUnfair.Server do
         _from,
         state = {users_db, bets_db, markets, bet_id}
       ) do
-    with {:ok, market_pid} <-
-           BetUnfair.DynamicSupervisor.start_child(name, description),
+    # BetUnfair.MarketServer.start_link(name, description),
+    with {:ok, market_pid} <- BetUnfair.DynamicSupervisor.start_child(name, description),
          new_markets <-
            Map.put(
              markets,
@@ -340,7 +340,8 @@ defmodule BetUnfair.Server do
     {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
     description = CubDB.get(market_db, :description)
     :ok = CubDB.stop(market_db)
-    {:ok, market_pid} = BetUnfair.MarketServer.start_link(name, description)
+    # BetUnfair.MarketServer.start_link(name, description)
+    {:ok, market_pid} = BetUnfair.DynamicSupervisor.start_child(name, description)
 
     new_markets =
       Map.put(

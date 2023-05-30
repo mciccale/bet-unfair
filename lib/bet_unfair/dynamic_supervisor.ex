@@ -1,5 +1,5 @@
 defmodule BetUnfair.DynamicSupervisor do
-  use DynamicSupervisor, restart: :transient
+  use DynamicSupervisor
 
   def start_link(_opts) do
     DynamicSupervisor.start_link(__MODULE__, :ok, name: :bet_unfair_dynamic_supervisor)

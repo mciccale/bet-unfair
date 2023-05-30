@@ -6,12 +6,12 @@ defmodule BetUnfair.Test do
   end
 
   test "db" do
-    assert {:ok, _} = BetUnfair.start_link("testdb")
+    assert {:ok, pid} = BetUnfair.start_link("testdb")
     assert :ok = BetUnfair.stop()
   end
 
   # Comprueba la persistencia de datos, en este caso de usuarios
-  test "users" do
+  test "user_persist1" do
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, u1} = BetUnfair.user_create("u1", "Francisco Gonzalez")
@@ -117,7 +117,7 @@ defmodule BetUnfair.Test do
     assert 1 = length(markets)
   end
 
-  test "user_persist" do
+  test "data_persist" do
     assert :ok = BetUnfair.clean("testdb")
     assert {:ok, _} = BetUnfair.start_link("testdb")
     assert {:ok, u1} = BetUnfair.user_create("u1", "Francisco Gonzalez")
@@ -145,6 +145,18 @@ defmodule BetUnfair.Test do
     assert 1 = length(markets)
     assert {:ok, markets} = BetUnfair.market_list_active()
     assert 1 = length(markets)
+
+    assert {:ok,
+            %{
+              odds: 150,
+              bet_type: :back,
+              market_id: m1,
+              user_id: u1,
+              original_stake: 1000,
+              remaining_stake: 1000,
+              matched_bets: [],
+              status: :active
+            }} = BetUnfair.bet_get(b)
   end
 
   test "match_bets1" do
