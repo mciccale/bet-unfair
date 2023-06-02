@@ -1,15 +1,6 @@
 defmodule BetUnfair.Test do
   use ExUnit.Case
 
-  test "clean_existing_db" do
-    assert :ok = BetUnfair.clean("testdb")
-  end
-
-  test "db" do
-    assert {:ok, pid} = BetUnfair.start_link("testdb")
-    assert :ok = BetUnfair.stop()
-  end
-
   # Comprueba la persistencia de datos, en este caso de usuarios
   test "user_persist1" do
     assert :ok = BetUnfair.clean("testdb")
