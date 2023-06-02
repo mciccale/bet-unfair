@@ -34,6 +34,7 @@ defmodule BetUnfair.MarketServer do
       CubDB.get_and_update(users_db, user_id, fn {user_name, balance, bets} ->
         cond do
           balance >= stake ->
+            # spawn(fn ->
             CubDB.put_new(
               market_db,
               {:back, odds, bet_id},
@@ -49,11 +50,16 @@ defmodule BetUnfair.MarketServer do
               }
             )
 
+            # end)
+
+            # spawn(fn ->
             CubDB.put(
               bets_db,
               bet_id,
               {user_id, market_name}
             )
+
+            # end)
 
             {{:ok, bet_id}, {user_name, balance - stake, [bet_id | bets]}}
 
@@ -75,6 +81,7 @@ defmodule BetUnfair.MarketServer do
       CubDB.get_and_update(users_db, user_id, fn {user_name, balance, bets} ->
         cond do
           balance >= stake ->
+            # spawn(fn ->
             CubDB.put_new(
               market_db,
               {:lay, odds, bet_id},
@@ -90,11 +97,16 @@ defmodule BetUnfair.MarketServer do
               }
             )
 
+            # end)
+
+            # spawn(fn ->
             CubDB.put(
               bets_db,
               bet_id,
               {user_id, market_name}
             )
+
+            # end)
 
             {{:ok, bet_id}, {user_name, balance - stake, [bet_id | bets]}}
 
