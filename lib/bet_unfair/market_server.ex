@@ -5,7 +5,7 @@ defmodule BetUnfair.MarketServer do
     {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
     CubDB.put_new(market_db, :description, description)
     CubDB.put_new(market_db, :status, :active)
-    GenServer.start_link(__MODULE__, {name, market_db}, name: String.to_atom(name))
+    GenServer.start_link(__MODULE__, {name, market_db})
   end
 
   @impl true

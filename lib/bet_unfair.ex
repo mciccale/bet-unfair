@@ -134,7 +134,7 @@ defmodule BetUnfair do
   @spec market_bets(id :: market_id()) :: {:ok, Enum.t(bet_id())} | :error
   def market_bets(id) do
     {:ok, market_pid} = GenServer.call(:bet_unfair, {:market_bets, id})
-    GenServer.call(market_pid, :market_bets)
+    GenServer.call(market_pid, :market_bets, 10_000)
   end
 
   @spec market_pending_backs(id :: market_id()) :: {:ok, Enum.t(bet_odd())} | :error
