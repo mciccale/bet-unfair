@@ -22,9 +22,8 @@ defmodule BetUnfair.Server do
     {:ok, files} = File.ls("./data/markets")
     markets = start_markets(files, %{})
 
-    # Recuperar ultimo id de bets
-
-    # Trata el caso de que sea vacía la lista y devuelve 0
+    # Retrieving the last bet_id
+    # In case it is empty, returns 0
     bet_id = CubDB.select(bets_db) |> Enum.to_list() |> Enum.max(&>=/2, fn -> 0 end)
 
     GenServer.start_link(
@@ -138,7 +137,6 @@ defmodule BetUnfair.Server do
         _from,
         state = {users_db, bets_db, markets, bet_id}
       ) do
-    # BetUnfair.MarketServer.start_link(name, description),
     with {:ok, market_pid} <- BetUnfair.DynamicSupervisor.start_child(name, description),
          new_markets <-
            Map.put(
@@ -339,8 +337,7 @@ defmodule BetUnfair.Server do
   defp start_markets([name | files], markets) do
     {:ok, market_db} = CubDB.start_link(data_dir: "./data/markets/" <> name, auto_file_sync: true)
     description = CubDB.get(market_db, :description)
-    :ok = CubDB.stop(market_db)
-    # BetUnfair.MarketServer.start_link(name, description)
+    CubDB.stop(market_db)
     {:ok, market_pid} = BetUnfair.DynamicSupervisor.start_child(name, description)
 
     new_markets =

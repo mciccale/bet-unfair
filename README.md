@@ -1,22 +1,17 @@
 # BetUnfair
 
-### Authors: Ramiro Lopez Cento, Esteban Aspe Ruiz and Marco Ciccale Baztan
+**Betting platform implementation using Elixir + OTP Patterns**
 
-**Betting platform implementation using Elixir + OTP GenServer**
+## How-To
 
-## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `bet_unfair` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:bet_unfair, "~> 0.1.0"}
-  ]
-end
+```
+$ git clone https://github.com/mciccale/bet-unfair.git
+$ cd bet_unfair
+$ mix deps.get
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/bet_unfair>.
+Authors:
+
+- Ramiro Lopez Cento
+- Esteban Aspe Ruiz
+- Marco Ciccale Baztan

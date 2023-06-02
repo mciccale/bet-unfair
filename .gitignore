@@ -27,3 +27,6 @@ bet_unfair-*.tar
 
 # Data subdirectories (trash)
 /data/*
+
+# DS_Store
+.DS_Store
